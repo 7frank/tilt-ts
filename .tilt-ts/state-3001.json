@@ -6,64 +6,8 @@
     "context": "k3d-ecosys-local-dev  ",
     "namespace": "eco_test"
   },
-  "docker_build": [
-    [
-      "ecosystem/dashie",
-      {
-        "context": ".",
-        "src": [
-          "Dockerfile"
-        ]
-      },
-      {
-        "ignore": [],
-        "live_update": [
-          {
-            "type": "sync",
-            "src": "src/*",
-            "dest": "/app/src"
-          },
-          {
-            "type": "run",
-            "path": "bun install",
-            "options": {
-              "trigger": [
-                "package.json"
-              ]
-            }
-          }
-        ]
-      }
-    ],
-    [
-      "ecosystem/dashie",
-      {
-        "context": ".",
-        "src": [
-          "Dockerfile"
-        ]
-      },
-      {
-        "ignore": [],
-        "live_update": [
-          {
-            "type": "sync",
-            "src": "src/*",
-            "dest": "/app/src"
-          },
-          {
-            "type": "run",
-            "path": "bun install",
-            "options": {
-              "trigger": [
-                "package.json"
-              ]
-            }
-          }
-        ]
-      }
-    ],
-    [
+  "docker_build": {
+    "ecosystem/dashie": [
       "ecosystem/dashie",
       {
         "context": ".",
@@ -91,5 +35,5 @@
         ]
       }
     ]
-  ]
+  }
 }

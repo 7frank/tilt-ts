@@ -10,20 +10,20 @@ const PORT = 3001;
 interface GlobalTiltState {
   k8s: { context: string; namespace: string };
   docker: { registry: string };
-  docker_build: Parameters<typeof docker_build>[];
+  docker_build: Record<string,Parameters<typeof docker_build>>;
 }
 
 const initialTiltState: GlobalTiltState = {
   docker: { registry: "localhost:5000" },
   k8s: { context: "k3d-ecosys-local-dev  ", namespace: "eco_test" },
-  docker_build: [],
+  docker_build: {},
 };
 
-async function getCachedConfig(fp: FileBlob,initialTiltState: GlobalTiltState) {
+async function getCachedConfig(fp: FileBlob,initialTiltState: GlobalTiltState):Promise<GlobalTiltState> {
   await $`mkdir -p .tilt-ts`;
 
 
-  return (await fp.exists()) ? await fp.json() : initialTiltState;
+  return (await fp.exists()) ? await fp.json() : initialTiltState; 
 }
 
 /*
@@ -63,7 +63,7 @@ export function docker_build(
     live_update?: (SYNC | RUN)[];
   }
 ) {
-  tiltState.docker_build.push([imageName, buildContext, hot]);
+  tiltState.docker_build[imageName]=[imageName, buildContext, hot];
 }
 
 docker_build(
@@ -127,23 +127,27 @@ const diffpatcher = jsondiffpatch.create({
   });
  
 const delta = diffpatcher.diff(lhs, rhs);
-console.log(delta)
+console.log("delta",delta)
+  
+
  
-
-
 await configFile.write(JSON.stringify(tiltState,null,2))
 
+const dryRun=true
 
-// for await (const d of tiltState.docker_build) {
-//   const [imageName, buildContext, hot] = d;
-//   await docker.buildImage(buildContext!, {
-//     t: imageName,
-//   } satisfies ImageBuildOptions);
 
-//   const paths = (hot?.live_update ?? []).filter(
-//     (it) => it.type == "sync"
-//   ) as SYNC[];
-//   for (const p of paths) {
-//     watchAndSyncFiles("TODOContainerName after k8s_yaml()", p.src, p.dest);
-//   }
-// }
+for await (const [key,d] of Object.entries(tiltState.docker_build)) {
+  const [imageName, buildContext, hot] = d;
+
+ break
+  await docker.buildImage(buildContext!, {
+    t: imageName,
+  } satisfies ImageBuildOptions);
+
+  const paths = (hot?.live_update ?? []).filter(
+    (it) => it.type == "sync"
+  ) as SYNC[];
+  for (const p of paths) {
+    watchAndSyncFiles("TODOContainerName after k8s_yaml()", p.src, p.dest);
+  }
+}

@@ -3,19 +3,36 @@ import Docker, {
   type ImageBuildOptions,
 } from "dockerode";
 
+import { $, file, FileBlob} from "bun";
+
+const PORT = 3001;
+
+interface GlobalTiltState {
+  k8s: { context: string; namespace: string };
+  docker: { registry: string };
+  docker_build: Parameters<typeof docker_build>[];
+}
+
+const initialTiltState: GlobalTiltState = {
+  docker: { registry: "localhost:5000" },
+  k8s: { context: "k3d-ecosys-local-dev  ", namespace: "eco_test" },
+  docker_build: [],
+};
+
+async function getCachedConfig(fp: FileBlob,initialTiltState: GlobalTiltState) {
+  await $`mkdir -p .tilt-ts`;
+
+
+  return (await fp.exists()) ? await fp.json() : initialTiltState;
+}
+
 /*
- bun run --watch index.ts
+
  load previous "state"
  run all commands and update state
  diff state
  run actual commands from the diff
  */
-
-interface GlobalTiltState {
-  docker_build: Parameters<typeof docker_build>[];
-}
-
-const tiltState: GlobalTiltState = { docker_build: [] };
 
 const sync = (src: string, dest: string) => {
   return { type: "sync", src, dest };
@@ -25,8 +42,15 @@ type SYNC = ReturnType<typeof sync>;
 const run = (fileOrPath: string, options: { trigger: string[] }) => {
   return { type: "run", path: fileOrPath, options };
 };
-
+  
 type RUN = ReturnType<typeof run>;
+const configFile = file(`.tilt-ts/state-${PORT}.json`);
+
+const tiltState = await getCachedConfig(configFile,initialTiltState);
+
+const cloneDeep = require("clone-deep");
+
+let oldTiltState = cloneDeep(tiltState);
 
 export function docker_build(
   imageName: string,
@@ -84,16 +108,42 @@ export function watchAndSyncFiles(
 
 const docker = new Docker({ socketPath: "/var/run/docker.sock" });
 
-for await (const d of tiltState.docker_build) {
-  const [imageName, buildContext, hot] = d;
-  await docker.buildImage(buildContext!, {
-    t: imageName,
-  } satisfies ImageBuildOptions);
 
-  const paths = (hot?.live_update ?? []).filter(
-    (it) => it.type == "sync"
-  ) as SYNC[];
-  for (const p of paths) {
-    watchAndSyncFiles("TODOContainerName after k8s_yaml()", p.src, p.dest);
-  }
-}
+var lhs = oldTiltState;
+
+var rhs = tiltState;
+
+import { diff as changes, applyChange } from "deep-diff";
+var differences = changes(lhs, rhs);
+console.log(differences);
+
+
+import * as jsondiffpatch from "jsondiffpatch";
+
+const diffpatcher = jsondiffpatch.create({
+    objectHash: function (obj:any) {
+      return obj.name;
+    },
+  });
+ 
+const delta = diffpatcher.diff(lhs, rhs);
+console.log(delta)
+ 
+
+
+await configFile.write(JSON.stringify(tiltState,null,2))
+
+
+// for await (const d of tiltState.docker_build) {
+//   const [imageName, buildContext, hot] = d;
+//   await docker.buildImage(buildContext!, {
+//     t: imageName,
+//   } satisfies ImageBuildOptions);
+
+//   const paths = (hot?.live_update ?? []).filter(
+//     (it) => it.type == "sync"
+//   ) as SYNC[];
+//   for (const p of paths) {
+//     watchAndSyncFiles("TODOContainerName after k8s_yaml()", p.src, p.dest);
+//   }
+// }

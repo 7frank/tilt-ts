@@ -2,6 +2,9 @@
   "name": "tilt_ts",
   "module": "index.ts",
   "type": "module",
+  "scripts": {
+    "start": "rm -rf .tilt-ts  &&  bun run --watch index.ts "
+  },
   "devDependencies": {
     "@types/bun": "latest"
   },
@@ -10,9 +13,13 @@
   },
   "dependencies": {
     "@kubernetes/client-node": "^1.0.0",
+    "@types/deep-diff": "^1.0.5",
     "@types/dockerode": "^3.3.34",
     "chokidar": "^4.0.3",
+    "clone-deep": "^4.0.1",
+    "deep-diff": "^1.0.2",
     "dockerode": "^4.0.4",
-    "fs-extra": "^11.3.0"
+    "fs-extra": "^11.3.0",
+    "jsondiffpatch": "^0.6.0"
   }
 }

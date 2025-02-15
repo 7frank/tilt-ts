@@ -1,9 +1,9 @@
 {
   "docker": {
-    "registry": "localhost:5000"
+    "registry": "localhost:36269"
   },
   "k8s": {
-    "context": "k3d-ecosys-local-dev  ",
+    "context": "k3d-ecosys-local-dev",
     "namespace": "eco_test"
   },
   "docker_build": {

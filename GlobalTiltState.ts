@@ -1,4 +1,4 @@
-import type { docker_build } from ".";
+import type { docker_build } from "./docker_build";
 import type { k8s_yaml } from "./k8s_yaml";
 
 export interface GlobalTiltState {

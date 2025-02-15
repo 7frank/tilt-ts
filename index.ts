@@ -1,44 +1,8 @@
-import Docker, {
-  type ImageBuildContext,
-  type ImageBuildOptions,
-} from "dockerode";
+import Docker, { type ImageBuildOptions } from "dockerode";
 
 import { finished } from "stream/promises";
 
-import { $, file } from "bun";
-
-import type { GlobalTiltState } from "./GlobalTiltState";
-
-const PORT = 3001;
-
-const initialTiltState: GlobalTiltState = {
-  docker: { registry: "localhost:5000" },
-  k8s: { context: "k3d-ecosys-local-dev  ", namespace: "eco_test" },
-  docker_build: {},
-  k8s_yaml: {},
-};
-
-const configFile = file(`.tilt-ts/state-${PORT}.json`);
-
-export const tiltState = await getCachedConfig(configFile, initialTiltState);
-
-const cloneDeep = require("clone-deep");
-
-let oldTiltState = cloneDeep(tiltState);
-
-export function docker_build(
-  imageName: string,
-  buildContext: ImageBuildContext = {
-    context: ".",
-    src: ["Dockerfile"],
-  },
-  hot?: {
-    ignore?: string[];
-    live_update?: (SYNC | RUN)[];
-  }
-) {
-  tiltState.docker_build[imageName] = [imageName, buildContext, hot];
-}
+import { $ } from "bun";
 
 docker_build(
   "ecosystem/nginx",
@@ -60,6 +24,9 @@ k8s_yaml("./example/deployment.yaml");
 /**
  * Below should be part of the tilt cli
  */
+const cloneDeep = require("clone-deep");
+const tiltState = getTiltState();
+let oldTiltState = cloneDeep();
 
 const docker = new Docker({ socketPath: "/var/run/docker.sock" });
 
@@ -72,9 +39,10 @@ var differences = changes(lhs, rhs);
 console.log(differences);
 
 import * as jsondiffpatch from "jsondiffpatch";
-import { getCachedConfig } from "./getCachedConfig";
 import { k8s_yaml } from "./k8s_yaml";
-import { type SYNC, type RUN, sync, run } from "./SYNC";
+import { sync, run } from "./SYNC";
+import { getTiltState, updateTileStateFile } from "./getTiltState";
+import { docker_build } from "./docker_build";
 
 const diffpatcher = jsondiffpatch.create({
   objectHash: function (obj: any) {
@@ -85,7 +53,7 @@ const diffpatcher = jsondiffpatch.create({
 const delta = diffpatcher.diff(lhs, rhs);
 console.log("delta", delta);
 
-await configFile.write(JSON.stringify(tiltState, null, 2));
+updateTileStateFile(tiltState);
 
 /**
  * build tag and push docke rimage to private registry
@@ -93,7 +61,7 @@ await configFile.write(JSON.stringify(tiltState, null, 2));
 for await (const [key, d] of Object.entries(tiltState.docker_build)) {
   const [imageName, buildContext, hot] = d;
 
-  const privateRegistry = "localhost:36269";
+  const privateRegistry = tiltState.docker.registry;
   const privateTag = privateRegistry + "/" + imageName;
 
   console.log("Building ", imageName);

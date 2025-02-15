@@ -91,6 +91,8 @@ docker_build(
   }
 );
 
+k8s_yaml("./example/deployment.yaml");
+
 import * as chokidar from "chokidar";
 import { exec } from "child_process";
 
@@ -141,8 +143,14 @@ await configFile.write(JSON.stringify(tiltState, null, 2));
 
 const dryRun = true;
 
+/**
+ * build tag and push docke rimage to private registry
+ */
 for await (const [key, d] of Object.entries(tiltState.docker_build)) {
   const [imageName, buildContext, hot] = d;
+
+  const privateRegistry = "localhost:36269";
+  const privateTag = privateRegistry + "/" + imageName;
 
   console.log("Building ", imageName);
   const stream = await docker.buildImage(buildContext!, {
@@ -151,9 +159,6 @@ for await (const [key, d] of Object.entries(tiltState.docker_build)) {
 
   stream.pipe(process.stdout);
   await finished(stream);
-
-  const privateRegistry = "localhost:36269";
-  const privateTag = privateRegistry + "/" + imageName;
 
   await docker.getImage(imageName).tag({ repo: privateTag });
   console.log("Tagged", privateTag);
@@ -166,10 +171,20 @@ for await (const [key, d] of Object.entries(tiltState.docker_build)) {
   pushStream.pipe(process.stdout);
   await finished(pushStream);
 
-  const paths = (hot?.live_update ?? []).filter(
-    (it) => it.type == "sync"
-  ) as SYNC[];
-  for (const p of paths) {
-    watchAndSyncFiles("TODOContainerName after k8s_yaml()", p.src, p.dest);
-  }
+  // const paths = (hot?.live_update ?? []).filter(
+  //   (it) => it.type == "sync"
+  // ) as SYNC[];
+  // for (const p of paths) {
+  //   watchAndSyncFiles("TODOContainerName after k8s_yaml()", p.src, p.dest);
+  // }
 }
+
+await $`kubectl config set-context k3d-ecosys-local-dev`;
+
+for await (const [key, d] of Object.entries(tiltState.k8s_yaml)) {
+  const [yamlFileName] = d;
+
+  const res=await $`kubectl apply -f ${yamlFileName}`.text();
+  console.log(res)
+}
+ 

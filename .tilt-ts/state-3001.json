@@ -35,5 +35,10 @@
         ]
       }
     ]
+  },
+  "k8s_yaml": {
+    "./example/deployment.yaml": [
+      "./example/deployment.yaml"
+    ]
   }
 }

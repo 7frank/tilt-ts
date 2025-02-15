@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: nginx
-        image:  ecosystem/nginx:latest  # Using the latest NGINX image
+        image:  k3d-registry:5000/ecosystem/nginx:latest  # Using the latest NGINX image
         ports:
         - containerPort: 80
         resources:

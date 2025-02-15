@@ -4,7 +4,7 @@ import { $ } from "bun";
 import cloneDeep from "clone-deep";
 import { diff as changes, applyChange } from "deep-diff";
 import * as jsondiffpatch from "jsondiffpatch";
-import { getTiltState, updateTileStateFile } from "./getTiltState";
+import { getTiltState, updateTileStateFile } from "./src/getTiltState";
 
 import path from "node:path"
 

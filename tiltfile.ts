@@ -1,6 +1,6 @@
-import { k8s_yaml } from "./k8s_yaml";
-import { docker_build } from "./docker_build";
-import { sync, run } from "./SYNC";
+import { k8s_yaml } from "./src/k8s_yaml";
+import { docker_build } from "./src/docker_build";
+import { sync, run } from "./src/SYNC";
 
 docker_build(
   "ecosystem/nginx",

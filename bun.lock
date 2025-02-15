@@ -5,6 +5,7 @@
       "name": "tilt_ts",
       "dependencies": {
         "@kubernetes/client-node": "^1.0.0",
+        "@types/clone-deep": "^4.0.4",
         "@types/deep-diff": "^1.0.5",
         "@types/dockerode": "^3.3.34",
         "chokidar": "^4.0.3",
@@ -64,6 +65,8 @@
     "@protobufjs/utf8": ["@protobufjs/utf8@1.1.0", "", {}, "sha512-Vvn3zZrhQZkkBE8LSuW3em98c0FwgO4nxzv6OdSxPKJIEKY2bGbHn+mhGIPerzI4twdxaP8/0+06HBpwf345Lw=="],
 
     "@types/bun": ["@types/bun@1.2.2", "", { "dependencies": { "bun-types": "1.2.2" } }, "sha512-tr74gdku+AEDN5ergNiBnplr7hpDp3V1h7fqI2GcR/rsUaM39jpSeKH0TFibRvU0KwniRx5POgaYnaXbk0hU+w=="],
+
+    "@types/clone-deep": ["@types/clone-deep@4.0.4", "", {}, "sha512-vXh6JuuaAha6sqEbJueYdh5zNBPPgG1OYumuz2UvLvriN6ABHDSW8ludREGWJb1MLIzbwZn4q4zUbUCerJTJfA=="],
 
     "@types/deep-diff": ["@types/deep-diff@1.0.5", "", {}, "sha512-PQyNSy1YMZU1hgZA5tTYfHPpUAo9Dorn1PZho2/budQLfqLu3JIP37JAavnwYpR1S2yFZTXa3hxaE4ifGW5jaA=="],
 

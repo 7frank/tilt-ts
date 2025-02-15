@@ -7,10 +7,10 @@
     "namespace": "eco_test"
   },
   "docker_build": {
-    "ecosystem/dashie": [
-      "ecosystem/dashie",
+    "ecosystem/nginx": [
+      "ecosystem/nginx",
       {
-        "context": ".",
+        "context": "./example",
         "src": [
           "Dockerfile"
         ]

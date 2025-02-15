@@ -6,6 +6,11 @@ import { diff as changes, applyChange } from "deep-diff";
 import * as jsondiffpatch from "jsondiffpatch";
 import { getTiltState, updateTileStateFile } from "./getTiltState";
 
+import path from "node:path"
+
+const tiltfilePath=path.resolve("./tiltfile.ts")
+
+await import(tiltfilePath)
 
 const tiltState = getTiltState();
 let oldTiltState = cloneDeep(tiltState);

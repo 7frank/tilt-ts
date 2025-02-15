@@ -6,6 +6,39 @@
     "context": "k3d-ecosys-local-dev",
     "namespace": "eco_test"
   },
-  "docker_build": {},
-  "k8s_yaml": {}
+  "docker_build": {
+    "ecosystem/nginx": [
+      "ecosystem/nginx",
+      {
+        "context": "./example",
+        "src": [
+          "Dockerfile"
+        ]
+      },
+      {
+        "ignore": [],
+        "live_update": [
+          {
+            "type": "sync",
+            "src": "src/*",
+            "dest": "/app/src"
+          },
+          {
+            "type": "run",
+            "path": "bun install",
+            "options": {
+              "trigger": [
+                "package.json"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "k8s_yaml": {
+    "./example/deployment.yaml": [
+      "./example/deployment.yaml"
+    ]
+  }
 }

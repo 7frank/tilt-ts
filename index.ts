@@ -141,12 +141,6 @@ await configFile.write(JSON.stringify(tiltState, null, 2));
 
 const dryRun = true;
 
-const { promisify } = require("util");
-
-const followProgress = promisify(docker.modem.followProgress).bind(
-  docker.modem
-);
-
 for await (const [key, d] of Object.entries(tiltState.docker_build)) {
   const [imageName, buildContext, hot] = d;
 

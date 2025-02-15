@@ -1,8 +1,5 @@
-import Docker, { type ImageBuildOptions } from "dockerode";
-
-import { finished } from "stream/promises";
-
-import { $ } from "bun";
+import { k8s_yaml } from "./k8s_yaml";
+import { docker_build } from "./docker_build";
 
 docker_build(
   "ecosystem/nginx",
@@ -24,6 +21,10 @@ k8s_yaml("./example/deployment.yaml");
 /**
  * Below should be part of the tilt cli
  */
+import Docker, { type ImageBuildOptions } from "dockerode";
+
+import { finished } from "stream/promises";
+import { $ } from "bun";
 const cloneDeep = require("clone-deep");
 const tiltState = getTiltState();
 let oldTiltState = cloneDeep();
@@ -39,10 +40,8 @@ var differences = changes(lhs, rhs);
 console.log(differences);
 
 import * as jsondiffpatch from "jsondiffpatch";
-import { k8s_yaml } from "./k8s_yaml";
 import { sync, run } from "./SYNC";
 import { getTiltState, updateTileStateFile } from "./getTiltState";
-import { docker_build } from "./docker_build";
 
 const diffpatcher = jsondiffpatch.create({
   objectHash: function (obj: any) {

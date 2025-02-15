@@ -5,16 +5,11 @@ import Docker, {
 
 import { finished } from "stream/promises";
 
-import { $, file, FileBlob } from "bun";
+import { $, file } from "bun";
+
+import type { GlobalTiltState } from "./GlobalTiltState";
 
 const PORT = 3001;
-
-interface GlobalTiltState {
-  k8s: { context: string; namespace: string };
-  docker: { registry: string };
-  docker_build: Record<string, Parameters<typeof docker_build>>;
-  k8s_yaml: Record<string, Parameters<typeof k8s_yaml>>;
-}
 
 const initialTiltState: GlobalTiltState = {
   docker: { registry: "localhost:5000" },
@@ -23,36 +18,9 @@ const initialTiltState: GlobalTiltState = {
   k8s_yaml: {},
 };
 
-async function getCachedConfig(
-  fp: FileBlob,
-  initialTiltState: GlobalTiltState
-): Promise<GlobalTiltState> {
-  await $`mkdir -p .tilt-ts`;
-
-  return (await fp.exists()) ? await fp.json() : initialTiltState;
-}
-
-/*
-
- load previous "state"
- run all commands and update state
- diff state
- run actual commands from the diff
- */
-
-const sync = (src: string, dest: string) => {
-  return { type: "sync", src, dest };
-};
-type SYNC = ReturnType<typeof sync>;
-
-const run = (fileOrPath: string, options: { trigger: string[] }) => {
-  return { type: "run", path: fileOrPath, options };
-};
-
-type RUN = ReturnType<typeof run>;
 const configFile = file(`.tilt-ts/state-${PORT}.json`);
 
-const tiltState = await getCachedConfig(configFile, initialTiltState);
+export const tiltState = await getCachedConfig(configFile, initialTiltState);
 
 const cloneDeep = require("clone-deep");
 
@@ -72,10 +40,6 @@ export function docker_build(
   tiltState.docker_build[imageName] = [imageName, buildContext, hot];
 }
 
-export function k8s_yaml(yamlFileName: string) {
-  tiltState.k8s_yaml[yamlFileName] = [yamlFileName];
-}
-
 docker_build(
   "ecosystem/nginx",
   {
@@ -93,30 +57,9 @@ docker_build(
 
 k8s_yaml("./example/deployment.yaml");
 
-import * as chokidar from "chokidar";
-import { exec } from "child_process";
-
-export function watchAndSyncFiles(
-  containerName: string,
-  srcPath: string,
-  destPath: string
-) {
-  chokidar
-    .watch(srcPath, { ignoreInitial: true })
-    .on("all", (event, filePath) => {
-      console.log(`Detected ${event} in ${filePath}, syncing to container...`);
-      exec(
-        `kubectl cp ${filePath} ${containerName}:${destPath}`,
-        (error, stdout, stderr) => {
-          if (error) {
-            console.error(`Error syncing file: ${stderr}`);
-          } else {
-            console.log(`File synced successfully.`);
-          }
-        }
-      );
-    });
-}
+/**
+ * Below should be part of the tilt cli
+ */
 
 const docker = new Docker({ socketPath: "/var/run/docker.sock" });
 
@@ -129,6 +72,9 @@ var differences = changes(lhs, rhs);
 console.log(differences);
 
 import * as jsondiffpatch from "jsondiffpatch";
+import { getCachedConfig } from "./getCachedConfig";
+import { k8s_yaml } from "./k8s_yaml";
+import { type SYNC, type RUN, sync, run } from "./SYNC";
 
 const diffpatcher = jsondiffpatch.create({
   objectHash: function (obj: any) {
@@ -140,8 +86,6 @@ const delta = diffpatcher.diff(lhs, rhs);
 console.log("delta", delta);
 
 await configFile.write(JSON.stringify(tiltState, null, 2));
-
-const dryRun = true;
 
 /**
  * build tag and push docke rimage to private registry
@@ -184,7 +128,6 @@ await $`kubectl config set-context k3d-ecosys-local-dev`;
 for await (const [key, d] of Object.entries(tiltState.k8s_yaml)) {
   const [yamlFileName] = d;
 
-  const res=await $`kubectl apply -f ${yamlFileName}`.text();
-  console.log(res)
+  const res = await $`kubectl apply -f ${yamlFileName}`.text();
+  console.log(res);
 }
- 

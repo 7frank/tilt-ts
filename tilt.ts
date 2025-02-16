@@ -4,7 +4,7 @@ import { $ } from "bun";
 import cloneDeep from "clone-deep";
 import { diff as changes, applyChange } from "deep-diff";
 import * as jsondiffpatch from "jsondiffpatch";
-import { getTiltState, updateTileStateFile } from "./src/getTiltState";
+import { tiltConfig } from "./src/tiltState";
 import path from "node:path";
 
 async function tiltUp() {
@@ -12,7 +12,7 @@ async function tiltUp() {
 
   await import(tiltfilePath);
 
-  const tiltState = getTiltState();
+  const tiltState = tiltConfig.state;
   let oldTiltState = cloneDeep(tiltState);
 
   const docker = new Docker({ socketPath: "/var/run/docker.sock" });
@@ -33,7 +33,7 @@ async function tiltUp() {
   const delta = diffpatcher.diff(lhs, rhs);
   console.log("delta", delta);
 
-  updateTileStateFile(tiltState);
+  tiltConfig.writeToDisk();
 
   /**
    * build tag and push docke rimage to private registry

@@ -1,5 +1,5 @@
 import type { ImageBuildContext } from "dockerode";
-import { getTiltState } from "./getTiltState";
+import {tiltConfig  } from "./tiltState";
 import type { SYNC, RUN } from "./SYNC";
 
 
@@ -14,5 +14,5 @@ export function docker_build(
     live_update?: (SYNC | RUN)[];
   }
 ) {
-  getTiltState().docker_build[imageName] = [imageName, buildContext, hot];
+  tiltConfig.state.docker_build[imageName] = [imageName, buildContext, hot];
 }

@@ -11,11 +11,27 @@ docker_build(
   {
     ignore: [],
     live_update: [
-      sync("src/*", "/app/src"),
-      run("bun install", { trigger: ["package.json"] }),
+      //sync("src/*", "/app/src"),
+      sync("example/*", "/usr/share/nginx/html"),
+      //run("bun install", { trigger: ["package.json"] }),
     ],
   }
 );
 
-k8s_yaml("./example/deployment.yaml");
- 
+k8s_yaml("./example");
+
+docker_build(
+  "ecosystem/app-test",
+  {
+    context: "./example",
+    src: ["Dockerfile"],
+  },
+  {
+    ignore: [],
+    live_update: [
+      sync("src/*", "/app/src"),
+
+      run("bun install", { trigger: ["package.json"] }),
+    ],
+  }
+);

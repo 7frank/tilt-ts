@@ -3,7 +3,8 @@
   "module": "index.ts",
   "type": "module",
   "scripts": {
-    "start": "rm -rf .tilt-ts  && NODE_TLS_REJECT_UNAUTHORIZED=0  bun run --watch tilt.ts up"
+    "start": "rm -rf .tilt-ts  && NODE_TLS_REJECT_UNAUTHORIZED=0  bun run --watch tilt.ts up",
+    "ip":"docker network inspect k3d-ecosys-local-dev | grep -m 1 \"Gateway\" | awk -F '\"' '{print $4}'"
   },
   "devDependencies": {
     "@types/bun": "latest"
@@ -22,6 +23,7 @@
     "deep-diff": "^1.0.2",
     "dockerode": "^4.0.4",
     "fs-extra": "^11.3.0",
+    "globby": "^14.1.0",
     "jsondiffpatch": "^0.6.0"
   }
 }

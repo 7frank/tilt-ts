@@ -1,6 +1,5 @@
-import { getTiltState } from "./getTiltState";
-
+import { tiltConfig } from "./tiltState";
 
 export function k8s_yaml(yamlFileName: string) {
-  getTiltState().k8s_yaml[yamlFileName] = [yamlFileName];
+  tiltConfig.state.k8s_yaml[yamlFileName] = [yamlFileName];
 }

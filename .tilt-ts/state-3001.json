@@ -20,6 +20,25 @@
         "live_update": [
           {
             "type": "sync",
+            "src": "example/*",
+            "dest": "/usr/share/nginx/html"
+          }
+        ]
+      }
+    ],
+    "ecosystem/app-test": [
+      "ecosystem/app-test",
+      {
+        "context": "./example",
+        "src": [
+          "Dockerfile"
+        ]
+      },
+      {
+        "ignore": [],
+        "live_update": [
+          {
+            "type": "sync",
             "src": "src/*",
             "dest": "/app/src"
           },
@@ -37,8 +56,8 @@
     ]
   },
   "k8s_yaml": {
-    "./example/deployment.yaml": [
-      "./example/deployment.yaml"
+    "./example": [
+      "./example"
     ]
   }
 }

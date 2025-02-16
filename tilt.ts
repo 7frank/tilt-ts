@@ -6,35 +6,38 @@ import { diff as changes, applyChange } from "deep-diff";
 import * as jsondiffpatch from "jsondiffpatch";
 import { tiltConfig } from "./src/tiltState";
 import path from "node:path";
+import { command, run, string, positional, subcommands } from "cmd-ts";
+
+const dryRun = true;
 
 async function tiltUp() {
   const tiltfilePath = path.resolve("./tiltfile.ts");
 
-  await import(tiltfilePath);
-
   const tiltState = tiltConfig.state;
   let oldTiltState = cloneDeep(tiltState);
+  await import(tiltfilePath);
+  let newTiltState = cloneDeep(tiltState);
 
   const docker = new Docker({ socketPath: "/var/run/docker.sock" });
 
+  // TODO get differences and create TempState that has relevant changes so that later stages can apply then
+  // for docker build this means we only need "N" new or changed
+  // vfor k8s_yaml we should distigniush betweenadd new and remove
   var lhs = oldTiltState;
-
-  var rhs = tiltState;
-
+  var rhs = newTiltState;
   var differences = changes(lhs, rhs);
   console.log(differences);
 
-  const diffpatcher = jsondiffpatch.create({
-    objectHash: function (obj: any) {
-      return obj.name;
-    },
-  });
-
-  const delta = diffpatcher.diff(lhs, rhs);
-  console.log("delta", delta);
+  // const diffpatcher = jsondiffpatch.create({
+  //   objectHash: function (obj: any) {
+  //     return obj.name;
+  //   },
+  // });
+  // const delta = diffpatcher.diff(lhs, rhs);
+  // console.log("delta", delta);
 
   tiltConfig.writeToDisk();
-
+  if (dryRun) return;
   /**
    * build tag and push docke rimage to private registry
    */
@@ -81,16 +84,13 @@ async function tiltUp() {
   }
 }
 
-
-import { command, run, string, positional, subcommands } from "cmd-ts";
-
 // "up" command
 const upCommand = command({
   name: "up",
   description: "Start the Tilt environment.",
   args: {},
   handler: ({}) => {
-   tiltUp()
+    tiltUp();
   },
 });
 

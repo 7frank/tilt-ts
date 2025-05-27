@@ -238,7 +238,7 @@ export class DockerManager {
         error: basicInfoResult.stderr 
       };
     } catch (error) {
-      return { error: error.toString() };
+      return { error: (error as any).toString() };
     }
   }
 

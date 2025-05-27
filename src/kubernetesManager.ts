@@ -520,7 +520,7 @@ export class KubernetesManager {
 
       return status;
     } catch (error) {
-      return { error: error.toString() };
+      return { error: (error as any).toString() };
     }
   }
 }

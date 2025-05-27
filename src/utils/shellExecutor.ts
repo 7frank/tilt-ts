@@ -51,7 +51,7 @@ export class ShellExecutor {
 
       let stdout = '';
       let stderr = '';
-      let timeoutId: NodeJS.Timeout | undefined;
+      let timeoutId:any | undefined;
 
       // Set up timeout
       if (timeout > 0) {

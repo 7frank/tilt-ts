@@ -28,10 +28,10 @@ git clone <repository-url>
 cd tilt_ts
 
 # Install dependencies (using Bun)
-bun install
+bun i @nk11/tilt-ts
 
 # Or using npm
-npm install
+npm i @nk11/tilt-ts
 ```
 
 ## ⚙️ Configuration

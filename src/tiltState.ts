@@ -1,18 +1,11 @@
 import { file, type BunFile } from "bun";
 import { getCachedConfig } from "./getCachedConfig";
-import type { docker_build } from "./docker_build";
-import type { k8s_yaml } from "./k8s_yaml";
-
-export interface GlobalTiltState {
-  k8s: { context: string; namespace: string };
-  docker: { registry: string };
-  docker_build: Record<string, Parameters<typeof docker_build>>;
-  k8s_yaml: Record<string, Parameters<typeof k8s_yaml>>;
-}
+import type { GlobalTiltState, DockerBuildConfig, K8sYamlConfig } from "./types";
 
 export class TiltConfig {
-  private configFile;
+  private configFile: BunFile;
   public state: GlobalTiltState;
+  private initialState: GlobalTiltState;
 
   constructor() {
     this.configFile = this.loadFromDisk();
@@ -22,19 +15,41 @@ export class TiltConfig {
       docker_build: {},
       k8s_yaml: {},
     };
+    this.initialState = structuredClone(this.state);
   }
 
   async init() {
     this.state = await getCachedConfig(this.configFile, this.state);
+    this.initialState = structuredClone(this.state);
   }
 
   loadFromDisk(): BunFile {
-    const PORT = 3001;
+    const PORT = process.env.TILT_PORT || 3001;
     return file(`.tilt-ts/state-${PORT}.json`);
   }
 
   async writeToDisk() {
     await this.configFile.write(JSON.stringify(this.state, null, 2));
+  }
+
+  addDockerBuild(imageName: string, buildContext: ImageBuildContext, hot?: HotReloadConfig) {
+    this.state.docker_build[imageName] = {
+      imageName,
+      buildContext,
+      hot
+    };
+  }
+
+  addK8sYaml(yamlPath: string) {
+    this.state.k8s_yaml[yamlPath] = { yamlPath };
+  }
+
+  getInitialState(): GlobalTiltState {
+    return structuredClone(this.initialState);
+  }
+
+  reset() {
+    this.initialState = structuredClone(this.state);
   }
 }
 

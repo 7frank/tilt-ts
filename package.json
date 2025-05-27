@@ -1,20 +1,25 @@
 {
   "name": "tilt_ts",
-  "module": "index.ts",
+  "module": "tilt.ts",
   "type": "module",
   "scripts": {
-    "start": "rm -rf .tilt-ts  && NODE_TLS_REJECT_UNAUTHORIZED=0  bun run --watch tilt.ts up",
-    "ip":"docker network inspect k3d-ecosys-local-dev | grep -m 1 \"Gateway\" | awk -F '\"' '{print $4}'"
+    "start": "rm -rf .tilt-ts && NODE_TLS_REJECT_UNAUTHORIZED=0 bun run --watch tilt.ts up",
+    "up": "bun run tilt.ts up",
+    "down": "bun run tilt.ts down", 
+    "status": "bun run tilt.ts status",
+    "dry-run": "bun run tilt.ts up --dry-run",
+    "ip": "docker network inspect k3d-ecosys-local-dev | grep -m 1 \"Gateway\" | awk -F '\"' '{print $4}'"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/node": "^20.0.0"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
   },
   "dependencies": {
     "@kubernetes/client-node": "^1.0.0",
-    "@types/clone-deep": "^4.0.4",
+    "@types/clone-deep": "^4.0.4", 
     "@types/deep-diff": "^1.0.5",
     "@types/dockerode": "^3.3.34",
     "chokidar": "^4.0.3",
@@ -23,7 +28,7 @@
     "deep-diff": "^1.0.2",
     "dockerode": "^4.0.4",
     "fs-extra": "^11.3.0",
-    "globby": "^14.1.0",
-    "jsondiffpatch": "^0.6.0"
+    "glob": "^10.3.0",
+    "globby": "^14.1.0"
   }
 }

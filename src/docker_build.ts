@@ -1,7 +1,6 @@
 import type { ImageBuildContext } from "dockerode";
-import {tiltConfig  } from "./tiltState";
-import type { SYNC, RUN } from "./SYNC";
-
+import { tiltConfig } from "./tiltState";
+import type { HotReloadConfig } from "./types";
 
 export function docker_build(
   imageName: string,
@@ -9,10 +8,7 @@ export function docker_build(
     context: ".",
     src: ["Dockerfile"],
   },
-  hot?: {
-    ignore?: string[];
-    live_update?: (SYNC | RUN)[];
-  }
+  hot?: HotReloadConfig
 ) {
-  tiltConfig.state.docker_build[imageName] = [imageName, buildContext, hot];
+  tiltConfig.addDockerBuild(imageName, buildContext, hot);
 }

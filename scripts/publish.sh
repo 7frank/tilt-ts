@@ -26,4 +26,4 @@ echo "📤 Publishing to npm..."
 npm publish --access public
 
 echo "✅ Published successfully!"
-echo "🏷️  New version: $(npm version --json | jq -r '.\"@tilt-ts/core\"')"
+echo "🏷️  New version: $(npm version --json | jq -r '.\"@nk11/tilt-ts\"')"

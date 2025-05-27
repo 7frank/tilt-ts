@@ -64,7 +64,7 @@ jobs:
             
             ## Installation
             ```bash
-            npm install -g @tilt-ts/core@${{ github.ref_name }}
+            npm install -g @nk11/tilt-ts@${{ github.ref_name }}
             ```
           draft: false
           prerelease: false

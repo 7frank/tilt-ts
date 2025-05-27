@@ -67,18 +67,18 @@ dist/
 
 ```bash
 # Install globally
-npm install -g @tilt-ts/core
+npm install -g @nk11/tilt-ts
 
 # Use CLI
 tilt-ts up
 
 # Use as library
-npm install @tilt-ts/core
+npm install @nk11/tilt-ts
 ```
 
 ```typescript
 // In your code
-import { docker_build, k8s_yaml, TiltEngine } from '@tilt-ts/core';
+import { docker_build, k8s_yaml, TiltEngine } from '@nk11/tilt-ts';
 ```
 
 ## ✅ Checklist Before Publishing

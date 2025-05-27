@@ -3,13 +3,16 @@ import { tiltConfig } from "./tiltState";
 import { StateAnalyzer } from "./stateAnalyzer";
 import { DockerManager } from "./dockerManager";
 import { KubernetesManager } from "./kubernetesManager";
+import { LiveUpdateManager } from "./liveUpdateManager";
 import type { GlobalTiltState } from "./types";
 
 export class TiltEngine {
   private stateAnalyzer: StateAnalyzer;
   private dockerManager: DockerManager;
   private kubernetesManager: KubernetesManager;
+  private liveUpdateManager: LiveUpdateManager;
   private isRunning: boolean = false;
+  private isDevMode: boolean = false;
 
   constructor() {
     this.stateAnalyzer = new StateAnalyzer();
@@ -18,16 +21,21 @@ export class TiltEngine {
       tiltConfig.state.k8s.context,
       tiltConfig.state.k8s.namespace
     );
+    this.liveUpdateManager = new LiveUpdateManager(
+      tiltConfig.state.k8s.context,
+      tiltConfig.state.k8s.namespace
+    );
   }
 
-  async up(dryRun: boolean = false): Promise<void> {
+  async up(dryRun: boolean = false, devMode: boolean = true): Promise<void> {
     if (this.isRunning) {
       console.log("⚠️  Tilt is already running");
       return;
     }
 
     this.isRunning = true;
-    console.log("🚀 Starting Tilt...");
+    this.isDevMode = devMode;
+    console.log(`🚀 Starting Tilt${devMode ? ' (dev mode)' : ''}...`);
 
     try {
       // Pre-flight checks
@@ -44,41 +52,7 @@ export class TiltEngine {
       console.log(`📊 Detected ${changes.length} changes`);
 
       if (dryRun) {
-        console.log("🔍 Dry run mode - changes that would be applied:");
-        console.log(JSON.stringify(changes, null, 2));
-
-        // Show what resources would be affected
-        const dockerChanges = this.stateAnalyzer.getDockerBuildChanges(changes);
-        const k8sChanges = this.stateAnalyzer.getK8sYamlChanges(changes);
-
-        console.log("\n🐳 Docker Changes:");
-        console.log(
-          `   Added: ${
-            dockerChanges.added.map((c) => c.imageName).join(", ") || "none"
-          }`
-        );
-        console.log(
-          `   Modified: ${
-            dockerChanges.modified.map((c) => c.imageName).join(", ") || "none"
-          }`
-        );
-        console.log(
-          `   Removed: ${dockerChanges.removed.join(", ") || "none"}`
-        );
-
-        console.log("\n☸️  Kubernetes Changes:");
-        console.log(
-          `   Added: ${
-            k8sChanges.added.map((c) => c.yamlPath).join(", ") || "none"
-          }`
-        );
-        console.log(
-          `   Modified: ${
-            k8sChanges.modified.map((c) => c.yamlPath).join(", ") || "none"
-          }`
-        );
-        console.log(`   Removed: ${k8sChanges.removed.join(", ") || "none"}`);
-
+        await this.showDryRunChanges(changes);
         return;
       }
 
@@ -101,6 +75,11 @@ export class TiltEngine {
         k8sSuccess = false;
       }
 
+      // Start live updates in dev mode
+      if (devMode && dockerSuccess && k8sSuccess) {
+        await this.setupLiveUpdates();
+      }
+
       // Save state only if at least one operation succeeded
       if (dockerSuccess || k8sSuccess) {
         await tiltConfig.writeToDisk();
@@ -109,6 +88,10 @@ export class TiltEngine {
 
       if (dockerSuccess && k8sSuccess) {
         console.log("✅ Tilt up completed successfully!");
+        if (devMode) {
+          console.log("🔄 Live updates are active - edit files to see changes!");
+          this.printDevModeInstructions();
+        }
       } else {
         console.warn("⚠️  Tilt up completed with some errors");
         if (!dockerSuccess) console.warn("   - Docker operations failed");
@@ -118,12 +101,20 @@ export class TiltEngine {
       console.error("❌ Tilt up failed:", error);
       throw error;
     } finally {
-      this.isRunning = false;
+      if (!this.isDevMode) {
+        this.isRunning = false;
+      }
     }
   }
 
   async down(): Promise<void> {
     console.log("🛑 Stopping Tilt...");
+
+    // Stop live updates first
+    if (this.isDevMode) {
+      console.log("🔄 Stopping live updates...");
+      await this.liveUpdateManager.stopAllLiveUpdates();
+    }
 
     let k8sSuccess = true;
     let dockerSuccess = true;
@@ -164,10 +155,156 @@ export class TiltEngine {
       dockerSuccess = false;
     }
 
+    this.isRunning = false;
+    this.isDevMode = false;
+
     if (k8sSuccess && dockerSuccess) {
       console.log("✅ Tilt down completed successfully!");
     } else {
       console.warn("⚠️  Tilt down completed with some cleanup issues");
+    }
+  }
+
+  /**
+   * Get status of live updates
+   */
+  getLiveUpdateStatus() {
+    return this.liveUpdateManager.getSessionStatus();
+  }
+
+  /**
+   * Manually trigger sync for an image
+   */
+  async triggerSync(imageName: string): Promise<void> {
+    await this.liveUpdateManager.triggerFullSync(imageName);
+  }
+
+  /**
+   * Get container logs for debugging
+   */
+  async getLogs(imageName: string, lines: number = 50): Promise<string> {
+    return await this.liveUpdateManager.getContainerLogs(imageName, lines);
+  }
+
+  /**
+   * Set up live updates for all configured Docker builds
+   */
+  private async setupLiveUpdates(): Promise<void> {
+    console.log("🔄 Setting up live updates...");
+
+    const dockerBuilds = Object.values(tiltConfig.state.docker_build);
+    const liveUpdateBuilds = dockerBuilds.filter(config => 
+      config.hot?.live_update && config.hot.live_update.length > 0
+    );
+
+    if (liveUpdateBuilds.length === 0) {
+      console.log("📝 No live updates configured");
+      return;
+    }
+
+    console.log(`🔄 Starting live updates for ${liveUpdateBuilds.length} image(s)...`);
+
+    // Start live updates for each build with a delay to allow pods to be ready
+    const startPromises = liveUpdateBuilds.map(async (config, index) => {
+      // Stagger the start to avoid overwhelming the system
+      await new Promise(resolve => setTimeout(resolve, index * 2000));
+      
+      try {
+        await this.liveUpdateManager.startLiveUpdate(config);
+      } catch (error) {
+        console.warn(`⚠️  Failed to start live updates for ${config.imageName}:`, error);
+      }
+    });
+
+    await Promise.allSettled(startPromises);
+
+    const activeSessions = this.liveUpdateManager.getSessionStatus().filter(s => s.isActive);
+    console.log(`✅ Live updates active for ${activeSessions.length}/${liveUpdateBuilds.length} image(s)`);
+  }
+
+  /**
+   * Show dry run changes
+   */
+  private async showDryRunChanges(changes: any[]): Promise<void> {
+    console.log("🔍 Dry run mode - changes that would be applied:");
+    console.log(JSON.stringify(changes, null, 2));
+
+    // Show what resources would be affected
+    const dockerChanges = this.stateAnalyzer.getDockerBuildChanges(changes);
+    const k8sChanges = this.stateAnalyzer.getK8sYamlChanges(changes);
+
+    console.log("\n🐳 Docker Changes:");
+    console.log(
+      `   Added: ${
+        dockerChanges.added.map((c) => c.imageName).join(", ") || "none"
+      }`
+    );
+    console.log(
+      `   Modified: ${
+        dockerChanges.modified.map((c) => c.imageName).join(", ") || "none"
+      }`
+    );
+    console.log(
+      `   Removed: ${dockerChanges.removed.join(", ") || "none"}`
+    );
+
+    console.log("\n☸️  Kubernetes Changes:");
+    console.log(
+      `   Added: ${
+        k8sChanges.added.map((c) => c.yamlPath).join(", ") || "none"
+      }`
+    );
+    console.log(
+      `   Modified: ${
+        k8sChanges.modified.map((c) => c.yamlPath).join(", ") || "none"
+      }`
+    );
+    console.log(`   Removed: ${k8sChanges.removed.join(", ") || "none"}`);
+
+    // Show live update configurations
+    console.log("\n🔄 Live Update Configurations:");
+    Object.entries(tiltConfig.state.docker_build).forEach(([name, config]) => {
+      if (config.hot?.live_update && config.hot.live_update.length > 0) {
+        console.log(`   ${name}:`);
+        config.hot.live_update.forEach((step, index) => {
+          if (step.type === 'sync') {
+            console.log(`      ${index + 1}. SYNC: ${step.src} -> ${step.dest}`);
+          } else if (step.type === 'run') {
+            console.log(`      ${index + 1}. RUN: ${step.path} (triggers: ${step.options.trigger.join(', ')})`);
+          }
+        });
+      } else {
+        console.log(`   ${name}: No live updates configured`);
+      }
+    });
+  }
+
+  /**
+   * Print instructions for dev mode
+   */
+  private printDevModeInstructions(): void {
+    console.log("\n📋 Development Mode Instructions:");
+    console.log("   - Edit files in your project directories");
+    console.log("   - Changes will be automatically synced to running containers");
+    console.log("   - Run commands will be triggered based on file patterns");
+    console.log("   - Use 'tilt down' to stop and clean up");
+    console.log("   - Use 'tilt status' to see current live update status");
+    
+    const liveUpdateBuilds = Object.values(tiltConfig.state.docker_build)
+      .filter(config => config.hot?.live_update && config.hot.live_update.length > 0);
+
+    if (liveUpdateBuilds.length > 0) {
+      console.log("\n🔄 Active Live Updates:");
+      liveUpdateBuilds.forEach(config => {
+        console.log(`   📦 ${config.imageName}:`);
+        config.hot?.live_update?.forEach(step => {
+          if (step.type === 'sync') {
+            console.log(`      📂 ${step.src} -> ${step.dest}`);
+          } else if (step.type === 'run') {
+            console.log(`      🚀 "${step.path}" on ${step.options.trigger.join(', ')}`);
+          }
+        });
+      });
     }
   }
 

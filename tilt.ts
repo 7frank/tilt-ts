@@ -1,5 +1,14 @@
 import path from "node:path";
-import { command, run, string, positional, subcommands, flag,option, boolean } from "cmd-ts";
+import {
+  command,
+  run,
+  string,
+  positional,
+  subcommands,
+  flag,
+  option,
+  boolean,
+} from "cmd-ts";
 import { tiltConfig } from "./src/tiltState";
 import { TiltEngine } from "./src/tiltEngine";
 
@@ -7,19 +16,23 @@ const tiltEngine = new TiltEngine();
 
 async function loadTiltfile() {
   const tiltfilePath = path.resolve("./tiltfile.ts");
-  
+
   try {
     // Clear previous state for fresh load
     tiltConfig.state.docker_build = {};
     tiltConfig.state.k8s_yaml = {};
-    
+
     // Import the Tiltfile to register resources
     delete require.cache[tiltfilePath]; // Clear module cache
     await import(tiltfilePath + `?t=${Date.now()}`); // Cache bust
-    
+
     console.log(`📝 Loaded Tiltfile: ${tiltfilePath}`);
-    console.log(`🐳 Docker builds: ${Object.keys(tiltConfig.state.docker_build).length}`);
-    console.log(`☸️  K8s resources: ${Object.keys(tiltConfig.state.k8s_yaml).length}`);
+    console.log(
+      `🐳 Docker builds: ${Object.keys(tiltConfig.state.docker_build).length}`
+    );
+    console.log(
+      `☸️  K8s resources: ${Object.keys(tiltConfig.state.k8s_yaml).length}`
+    );
   } catch (error) {
     console.error("❌ Failed to load Tiltfile:", error);
     throw error;
@@ -35,8 +48,8 @@ const upCommand = command({
       type: boolean,
       long: "dry-run",
       description: "Show what would be done without actually doing it",
-      defaultValue: () =>false
-    })
+      defaultValue: () => false,
+    }),
   },
   handler: async ({ dryRun }) => {
     await loadTiltfile();
@@ -45,11 +58,85 @@ const upCommand = command({
 });
 
 const downCommand = command({
-  name: "down", 
+  name: "down",
   description: "Stop the Tilt environment",
   args: {},
   handler: async () => {
     await tiltEngine.down();
+  },
+});
+
+const validateCommand = command({
+  name: "validate",
+  description: "Validate Tiltfile and YAML resources",
+  args: {},
+  handler: async () => {
+    try {
+      await loadTiltfile();
+
+      console.log("🔍 Validating Tiltfile configuration...");
+
+      // Validate Docker builds
+      const dockerBuilds = Object.entries(tiltConfig.state.docker_build);
+      console.log(`\n🐳 Docker Builds (${dockerBuilds.length}):`);
+
+      for (const [name, config] of dockerBuilds) {
+        console.log(`   ✅ ${name}`);
+        console.log(`      Context: ${config.buildContext.context}`);
+        console.log(
+          `      Dockerfile: ${config.buildContext.dockerfile || "Dockerfile"}`
+        );
+
+        if (config.hot?.live_update) {
+          console.log(
+            `      Live updates: ${config.hot.live_update.length} step(s)`
+          );
+        }
+      }
+
+      // Validate K8s YAML files
+      const k8sResources = Object.entries(tiltConfig.state.k8s_yaml);
+      console.log(`\n☸️  Kubernetes Resources (${k8sResources.length}):`);
+
+      let totalFiles = 0;
+      let validFiles = 0;
+      let invalidFiles = 0;
+
+      for (const [_, config] of k8sResources) {
+        console.log(`   📄 ${config.yamlPath}`);
+
+        // Validate the YAML file
+        const { validateYamlFile } = await import("./src/k8s_yaml");
+        const validation = validateYamlFile(config.yamlPath);
+
+        totalFiles++;
+
+        if (validation.valid) {
+          console.log(`      ✅ Valid YAML`);
+          validFiles++;
+        } else {
+          console.log(`      ❌ Invalid YAML: ${validation.error}`);
+          invalidFiles++;
+        }
+      }
+
+      // Summary
+      console.log(`\n📊 Validation Summary:`);
+      console.log(`   Docker builds: ${dockerBuilds.length}`);
+      console.log(`   YAML files: ${totalFiles}`);
+      console.log(`   Valid YAML: ${validFiles}`);
+      console.log(`   Invalid YAML: ${invalidFiles}`);
+
+      if (invalidFiles > 0) {
+        console.log(`\n⚠️  Found ${invalidFiles} invalid YAML file(s)`);
+        process.exit(1);
+      } else {
+        console.log(`\n✅ All configurations are valid!`);
+      }
+    } catch (error) {
+      console.error("❌ Validation failed:", error);
+      process.exit(1);
+    }
   },
 });
 
@@ -71,17 +158,18 @@ const statusCommand = command({
     Object.entries(tiltConfig.state.k8s_yaml).forEach(([name, config]) => {
       console.log(`  - ${config.yamlPath}`);
     });
-  }
+  },
 });
 
 // Main CLI
 const tiltCli = subcommands({
   name: "tilt",
   description: "Tilt - Kubernetes for Development",
-  cmds: { 
+  cmds: {
     up: upCommand,
-    down: downCommand, 
-    status: statusCommand
+    down: downCommand,
+    status: statusCommand,
+    validate: validateCommand,
   },
 });
 

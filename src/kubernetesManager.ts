@@ -384,60 +384,35 @@ export class KubernetesManager {
 
   private async resolveYamlFiles(yamlPath: string): Promise<string[]> {
     try {
+      // The yamlPath should already be resolved by k8s_yaml function
+      // But we'll add some validation here for safety
+
       // Check if path exists
       const fileExists = await Bun.file(yamlPath).exists();
       if (!fileExists) {
-        throw new Error(`YAML path does not exist: ${yamlPath}`);
+        throw new Error(`YAML file does not exist: ${yamlPath}`);
       }
 
-      // Check if it's a directory using shell command
+      // Check if it's actually a file (not a directory)
       const statResult = await ShellExecutor.execQuiet("test", [
-        "-d",
+        "-f",
         yamlPath,
       ]);
 
-      if (statResult.success) {
-        // It's a directory - find all YAML files
-        const patterns = [
-          path.join(yamlPath, "*.yaml"),
-          path.join(yamlPath, "*.yml"),
-          path.join(yamlPath, "**/*.yaml"),
-          path.join(yamlPath, "**/*.yml"),
-        ];
-
-        const files: string[] = [];
-        for (const pattern of patterns) {
-          const matches = glob.sync(pattern, {
-            ignore: ["**/node_modules/**", "**/.git/**"],
-            absolute: true,
-          });
-          files.push(...matches);
-        }
-
-        // Remove duplicates and sort
-        const uniqueFiles = [...new Set(files)].sort();
-
-        if (uniqueFiles.length === 0) {
-          console.warn(`⚠️  No YAML files found in directory: ${yamlPath}`);
-        } else {
-          console.log(
-            `📁 Found ${uniqueFiles.length} YAML file(s) in ${yamlPath}`
-          );
-        }
-
-        return uniqueFiles;
-      } else {
-        // Single file
-        const ext = path.extname(yamlPath).toLowerCase();
-        if (ext !== ".yaml" && ext !== ".yml") {
-          console.warn(`⚠️  File ${yamlPath} does not have a YAML extension`);
-        }
-        return [path.resolve(yamlPath)];
+      if (!statResult.success) {
+        throw new Error(`Path is not a regular file: ${yamlPath}`);
       }
+
+      // Validate it's a YAML file
+      const ext = path.extname(yamlPath).toLowerCase();
+      if (ext !== ".yaml" && ext !== ".yml") {
+        console.warn(`⚠️  File ${yamlPath} does not have a YAML extension`);
+      }
+
+      // Return the single resolved file
+      return [path.resolve(yamlPath)];
     } catch (error) {
-      throw new Error(
-        `Failed to resolve YAML files from ${yamlPath}: ${error}`
-      );
+      throw new Error(`Failed to resolve YAML file ${yamlPath}: ${error}`);
     }
   }
 

@@ -1,6 +1,6 @@
 {
   "name": "@tilt-ts/core",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "TypeScript implementation of Tilt.dev for Kubernetes development workflows",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

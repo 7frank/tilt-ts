@@ -1,6 +1,7 @@
 // src/dockerManager.ts
 import Docker, { type ImageBuildOptions } from "dockerode";
 import { finished } from "stream/promises";
+import { ShellExecutor } from "./utils/shellExecutor";
 import type { DockerBuildConfig } from "./types";
 
 export class DockerManager {
@@ -20,11 +21,26 @@ export class DockerManager {
     if (this.connectionVerified) return;
 
     try {
-      // Test Docker daemon connection
+      // First check if docker command is available
+      const dockerExists = await ShellExecutor.commandExists('docker');
+      if (!dockerExists) {
+        throw new Error("Docker command not found. Please install Docker.");
+      }
+
+      // Test Docker daemon connection using CLI (more reliable than dockerode)
+      const pingResult = await ShellExecutor.execQuiet('docker', ['info'], { timeout: 10000 });
+      if (!pingResult.success) {
+        throw new Error(`Docker daemon not responding: ${pingResult.stderr}`);
+      }
+
+      // Test basic operations
+      const versionResult = await ShellExecutor.execQuiet('docker', ['version', '--format', 'json']);
+      if (!versionResult.success) {
+        throw new Error(`Cannot get Docker version: ${versionResult.stderr}`);
+      }
+
+      // Also verify dockerode connection
       await this.docker.ping();
-      
-      // Verify we can list images (basic permission check)
-      await this.docker.listImages({ limit: 1 });
       
       console.log("✅ Docker connection verified");
       this.connectionVerified = true;
@@ -65,47 +81,44 @@ export class DockerManager {
       console.log(`   Context: ${buildContext.context}`);
       console.log(`   Dockerfile: ${dockerfilePath}`);
 
-      // Build the image
-      const buildOptions: ImageBuildOptions = {
-        t: imageName,
-        dockerfile: dockerfilePath,
-        ...buildContext
-      };
+      // Use docker CLI for building (more reliable than dockerode for complex builds)
+      const buildArgs = [
+        'build',
+        '-t', imageName,
+        '-f', dockerfilePath,
+        buildContext.context
+      ];
 
-      const stream = await this.docker.buildImage(buildContext, buildOptions);
-
-      // Stream build output with error detection
-      let buildError = false;
-      let errorMessage = '';
-
-      stream.on('data', (chunk) => {
-        const data = chunk.toString();
-        process.stdout.write(data);
-        
-        // Check for build errors in output
-        if (data.includes('ERROR') || data.includes('failed')) {
-          buildError = true;
-          errorMessage += data;
+      // Add build args if provided
+      if (buildContext.build_args) {
+        for (const [key, value] of Object.entries(buildContext.build_args)) {
+          buildArgs.push('--build-arg', `${key}=${value}`);
         }
+      }
+
+      // Build with streaming output
+      const buildResult = await ShellExecutor.execStream('docker', buildArgs, {
+        timeout: 600000 // 10 minutes timeout for builds
       });
 
-      await finished(stream);
-
-      if (buildError) {
-        throw new Error(`Build failed: ${errorMessage}`);
+      if (!buildResult.success) {
+        throw new Error(`Build failed: ${buildResult.stderr}`);
       }
 
       // Verify image was created
-      const images = await this.docker.listImages({
-        filters: { reference: [imageName] }
-      });
+      const verifyResult = await ShellExecutor.execQuiet('docker', [
+        'images', '--format', 'table {{.Repository}}:{{.Tag}}', imageName
+      ]);
 
-      if (images.length === 0) {
+      if (!verifyResult.success || !verifyResult.stdout.includes(imageName)) {
         throw new Error(`Image ${imageName} was not created successfully`);
       }
 
       // Tag for private registry
-      await this.docker.getImage(imageName).tag({ repo: privateTag });
+      const tagResult = await ShellExecutor.exec('docker', ['tag', imageName, privateTag]);
+      if (!tagResult.success) {
+        throw new Error(`Failed to tag image: ${tagResult.stderr}`);
+      }
       console.log(`📦 Tagged: ${privateTag}`);
 
       // Push to registry (with retry logic)
@@ -117,7 +130,8 @@ export class DockerManager {
       
       // Cleanup failed build artifacts
       try {
-        await this.docker.getImage(imageName).remove({ force: true });
+        await ShellExecutor.execQuiet('docker', ['rmi', imageName, '--force']);
+        await ShellExecutor.execQuiet('docker', ['rmi', privateTag, '--force']);
       } catch (cleanupError) {
         console.warn(`⚠️  Failed to cleanup failed build: ${cleanupError}`);
       }
@@ -133,49 +147,17 @@ export class DockerManager {
       try {
         console.log(`📤 Pushing ${imageTag} (attempt ${attempt}/${maxRetries})`);
         
-        const pushStream = await this.docker
-          .getImage(imageTag)
-          .push({ 
-            authconfig: { serveraddress: this.registry },
-            // Add timeout for push operations
-            timeout: 300000 // 5 minutes
-          });
-
-        // Monitor push progress
-        let pushError = false;
-        let errorDetails = '';
-
-        pushStream.on('data', (chunk) => {
-          const data = chunk.toString();
-          try {
-            const lines = data.trim().split('\n');
-            for (const line of lines) {
-              if (line.trim()) {
-                const parsed = JSON.parse(line);
-                if (parsed.error) {
-                  pushError = true;
-                  errorDetails += parsed.error + ' ';
-                }
-                // Show progress for large images
-                if (parsed.progress && parsed.id) {
-                  process.stdout.write(`\r   ${parsed.id}: ${parsed.progress}`);
-                }
-              }
-            }
-          } catch {
-            // Non-JSON output, just display
-            process.stdout.write(data);
-          }
+        // Use docker CLI for pushing (more reliable progress reporting)
+        const pushResult = await ShellExecutor.execStream('docker', ['push', imageTag], {
+          timeout: 600000 // 10 minutes timeout for push
         });
 
-        await finished(pushStream);
-        console.log(); // New line after progress
-
-        if (pushError) {
-          throw new Error(`Push failed: ${errorDetails}`);
+        if (!pushResult.success) {
+          throw new Error(`Push failed: ${pushResult.stderr}`);
         }
 
         // Success - break retry loop
+        console.log(`✅ Successfully pushed: ${imageTag}`);
         return;
 
       } catch (error) {
@@ -199,21 +181,17 @@ export class DockerManager {
       
       const privateTag = `${this.registry}/${imageName}`;
       
-      // Remove both local and registry tags
-      const images = await this.docker.listImages({
-        filters: { reference: [imageName, privateTag] }
-      });
-
-      for (const imageInfo of images) {
-        try {
-          const image = this.docker.getImage(imageInfo.Id);
-          await image.remove({ force: true });
-        } catch (error) {
-          console.warn(`⚠️  Failed to remove image ${imageInfo.Id}:`, error);
+      // Remove both local and registry tags using docker CLI
+      const images = [imageName, privateTag];
+      
+      for (const image of images) {
+        const removeResult = await ShellExecutor.execQuiet('docker', ['rmi', image, '--force']);
+        if (removeResult.success) {
+          console.log(`🗑️  Removed: ${image}`);
         }
       }
       
-      console.log(`🗑️  Removed image: ${imageName}`);
+      console.log(`✅ Cleaned up image: ${imageName}`);
     } catch (error) {
       console.warn(`⚠️  Failed to remove ${imageName}:`, error);
     }
@@ -226,20 +204,15 @@ export class DockerManager {
     try {
       await this.checkConnection();
       
-      const images = await this.docker.listImages();
-      const tiltImages: string[] = [];
+      const listResult = await ShellExecutor.execQuiet('docker', [
+        'images', '--format', '{{.Repository}}:{{.Tag}}', '--filter', `reference=${this.registry}/*`
+      ]);
 
-      for (const imageInfo of images) {
-        if (imageInfo.RepoTags) {
-          for (const tag of imageInfo.RepoTags) {
-            if (tag.startsWith(this.registry + '/')) {
-              tiltImages.push(tag);
-            }
-          }
-        }
+      if (listResult.success) {
+        return listResult.stdout.split('\n').filter(line => line.trim());
       }
 
-      return tiltImages;
+      return [];
     } catch (error) {
       console.warn(`⚠️  Failed to list images:`, error);
       return [];
@@ -252,7 +225,18 @@ export class DockerManager {
   async getSystemInfo(): Promise<any> {
     try {
       await this.checkConnection();
-      return await this.docker.info();
+      
+      const infoResult = await ShellExecutor.execQuiet('docker', ['system', 'info', '--format', 'json']);
+      if (infoResult.success) {
+        return JSON.parse(infoResult.stdout);
+      }
+      
+      // Fallback to basic info
+      const basicInfoResult = await ShellExecutor.execQuiet('docker', ['info']);
+      return { 
+        raw: basicInfoResult.stdout,
+        error: basicInfoResult.stderr 
+      };
     } catch (error) {
       return { error: error.toString() };
     }
@@ -268,30 +252,189 @@ export class DockerManager {
       console.log("🧹 Cleaning up Docker artifacts...");
       
       // Remove dangling images
-      const danglingImages = await this.docker.listImages({
-        filters: { dangling: ['true'] }
-      });
+      const pruneDanglingResult = await ShellExecutor.exec('docker', [
+        'image', 'prune', '-f'
+      ]);
 
-      for (const imageInfo of danglingImages) {
-        try {
-          await this.docker.getImage(imageInfo.Id).remove();
-        } catch (error) {
-          console.warn(`⚠️  Failed to remove dangling image: ${error}`);
-        }
+      if (pruneDanglingResult.success) {
+        console.log("   ✅ Removed dangling images");
+      } else {
+        console.warn(`   ⚠️  Failed to remove dangling images: ${pruneDanglingResult.stderr}`);
       }
 
       // Prune build cache
-      try {
-        await this.docker.pruneImages({
-          filters: { dangling: ['true'] }
-        });
-      } catch (error) {
-        console.warn(`⚠️  Failed to prune build cache: ${error}`);
+      const pruneBuildResult = await ShellExecutor.exec('docker', [
+        'builder', 'prune', '-f'
+      ]);
+
+      if (pruneBuildResult.success) {
+        console.log("   ✅ Cleaned build cache");
+      } else {
+        console.warn(`   ⚠️  Failed to clean build cache: ${pruneBuildResult.stderr}`);
+      }
+
+      // Remove unused volumes (optional)
+      const pruneVolumesResult = await ShellExecutor.execQuiet('docker', [
+        'volume', 'prune', '-f'
+      ]);
+
+      if (pruneVolumesResult.success) {
+        console.log("   ✅ Cleaned unused volumes");
       }
 
       console.log("✅ Docker cleanup completed");
     } catch (error) {
       console.warn(`⚠️  Docker cleanup failed: ${error}`);
+    }
+  }
+
+  /**
+   * Check if an image exists locally
+   */
+  async imageExists(imageName: string): Promise<boolean> {
+    try {
+      const inspectResult = await ShellExecutor.execQuiet('docker', [
+        'image', 'inspect', imageName
+      ]);
+      return inspectResult.success;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * Get image build history
+   */
+  async getImageHistory(imageName: string): Promise<string[]> {
+    try {
+      await this.checkConnection();
+      
+      const historyResult = await ShellExecutor.execQuiet('docker', [
+        'history', imageName, '--format', 'table {{.CreatedBy}}'
+      ]);
+
+      if (historyResult.success) {
+        return historyResult.stdout.split('\n').filter(line => line.trim());
+      }
+      return [];
+    } catch (error) {
+      console.warn(`⚠️  Failed to get image history for ${imageName}:`, error);
+      return [];
+    }
+  }
+
+  /**
+   * Get container logs for debugging
+   */
+  async getContainerLogs(containerName: string, lines: number = 100): Promise<string> {
+    try {
+      const logsResult = await ShellExecutor.execQuiet('docker', [
+        'logs', '--tail', lines.toString(), containerName
+      ]);
+
+      return logsResult.success ? logsResult.stdout : logsResult.stderr;
+    } catch (error) {
+      return `Error getting logs: ${error}`;
+    }
+  }
+
+  /**
+   * Check registry connectivity
+   */
+  async checkRegistryConnection(): Promise<boolean> {
+    try {
+      // Try to ping the registry
+      const registryHost = this.registry.split(':')[0];
+      const registryPort = parseInt(this.registry.split(':')[1] || '5000');
+
+      const canConnect = await ShellExecutor.testConnection(registryHost, registryPort, 5000);
+      
+      if (!canConnect) {
+        console.warn(`⚠️  Cannot connect to registry ${this.registry}`);
+        return false;
+      }
+
+      // Try a simple registry operation
+      const testResult = await ShellExecutor.execQuiet('docker', [
+        'search', '--limit', '1', 'alpine'
+      ], { timeout: 10000 });
+
+      return testResult.success;
+    } catch (error) {
+      console.warn(`⚠️  Registry connection check failed: ${error}`);
+      return false;
+    }
+  }
+
+  /**
+   * Get running containers in our namespace
+   */
+  async getRunningContainers(): Promise<Array<{ name: string; image: string; status: string }>> {
+    try {
+      const containersResult = await ShellExecutor.execQuiet('docker', [
+        'ps', '--format', 'json'
+      ]);
+
+      if (!containersResult.success) {
+        return [];
+      }
+
+      const containers = containersResult.stdout
+        .split('\n')
+        .filter(line => line.trim())
+        .map(line => {
+          try {
+            const container = JSON.parse(line);
+            return {
+              name: container.Names,
+              image: container.Image,
+              status: container.Status
+            };
+          } catch {
+            return null;
+          }
+        })
+        .filter(container => container !== null)
+        .filter(container => container.image.startsWith(this.registry));
+
+      return containers;
+    } catch (error) {
+      console.warn(`⚠️  Failed to get running containers: ${error}`);
+      return [];
+    }
+  }
+
+  /**
+   * Force stop and remove containers by image
+   */
+  async stopContainersByImage(imageName: string): Promise<void> {
+    try {
+      const privateTag = `${this.registry}/${imageName}`;
+      
+      // Find containers using this image
+      const containerResult = await ShellExecutor.execQuiet('docker', [
+        'ps', '-a', '--filter', `ancestor=${privateTag}`, '--format', '{{.ID}}'
+      ]);
+
+      if (!containerResult.success || !containerResult.stdout.trim()) {
+        return; // No containers found
+      }
+
+      const containerIds = containerResult.stdout.split('\n').filter(id => id.trim());
+      
+      if (containerIds.length > 0) {
+        console.log(`🛑 Stopping ${containerIds.length} container(s) for image ${imageName}`);
+        
+        // Stop containers
+        await ShellExecutor.exec('docker', ['stop', ...containerIds]);
+        
+        // Remove containers
+        await ShellExecutor.exec('docker', ['rm', '--force', ...containerIds]);
+        
+        console.log(`✅ Cleaned up containers for ${imageName}`);
+      }
+    } catch (error) {
+      console.warn(`⚠️  Failed to stop containers for ${imageName}: ${error}`);
     }
   }
 }

@@ -1,3 +1,4 @@
+// src/types.ts
 import type { ImageBuildContext } from "dockerode";
 
 export interface SYNC {
@@ -17,11 +18,15 @@ export type LiveUpdateStep = SYNC | RUN;
 export interface HotReloadConfig {
   ignore?: string[];
   live_update?: LiveUpdateStep[];
+  build_args?: Record<string, string>;
 }
 
 export interface DockerBuildConfig {
   imageName: string;
-  buildContext: ImageBuildContext;
+  buildContext: ImageBuildContext & {
+    build_args?: Record<string, string>;
+    dockerfile?: string;
+  };
   hot?: HotReloadConfig;
 }
 
@@ -37,8 +42,25 @@ export interface GlobalTiltState {
 }
 
 export interface TiltStateChange {
-  type: 'added' | 'removed' | 'modified';
+  type: "added" | "removed" | "modified";
   path: string[];
   value?: any;
   oldValue?: any;
+}
+
+// Shell execution types
+export interface ShellResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  success: boolean;
+}
+
+export interface ShellOptions {
+  cwd?: string;
+  env?: Record<string, string>;
+  timeout?: number;
+  silent?: boolean;
+  streamOutput?: boolean;
+  input?: string;
 }

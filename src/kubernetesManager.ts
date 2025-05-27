@@ -1,6 +1,6 @@
 // src/kubernetesManager.ts
-import { $ } from "bun";
 import type { K8sYamlConfig } from "./types";
+import { ShellExecutor } from "./utils/shellExecutor";
 import { glob } from "glob";
 import path from "path";
 
@@ -56,9 +56,31 @@ export class KubernetesManager {
     if (this.contextAvailable) return true;
 
     try {
+      // First check if kubectl is available
+      const kubectlExists = await ShellExecutor.commandExists("kubectl");
+      if (!kubectlExists) {
+        console.error(`❌ kubectl command not found. Please install kubectl.`);
+        return false;
+      }
+
       // Check if context exists
-      const contexts = await $`kubectl config get-contexts -o name`.text();
-      const availableContexts = contexts.trim().split("\n");
+      const contextsResult = await ShellExecutor.execQuiet("kubectl", [
+        "config",
+        "get-contexts",
+        "-o",
+        "name",
+      ]);
+
+      if (!contextsResult.success) {
+        console.error(
+          `❌ Failed to get kubectl contexts: ${contextsResult.stderr}`
+        );
+        return false;
+      }
+
+      const availableContexts = contextsResult.stdout
+        .split("\n")
+        .filter((ctx) => ctx.trim());
 
       if (!availableContexts.includes(this.context)) {
         console.error(
@@ -69,22 +91,30 @@ export class KubernetesManager {
       }
 
       // Try to switch to context
-      const switchResult =
-        await $`kubectl config use-context ${this.context}`.quiet();
-      if (switchResult.exitCode !== 0) {
-        console.error(`❌ Failed to switch to context "${this.context}"`);
-        console.error(switchResult.stderr.toString());
+      const switchResult = await ShellExecutor.execQuiet("kubectl", [
+        "config",
+        "use-context",
+        this.context,
+      ]);
+
+      if (!switchResult.success) {
+        console.error(
+          `❌ Failed to switch to context "${this.context}": ${switchResult.stderr}`
+        );
         return false;
       }
 
-      // Test connectivity
-      const connectTest =
-        await $`kubectl cluster-info --request-timeout=5s`.quiet();
-      if (connectTest.exitCode !== 0) {
+      // Test connectivity with timeout
+      const connectTest = await ShellExecutor.execQuiet(
+        "kubectl",
+        ["cluster-info", "--request-timeout=10s"],
+        { timeout: 15000 }
+      );
+
+      if (!connectTest.success) {
         console.error(
-          `❌ Cannot connect to cluster in context "${this.context}"`
+          `❌ Cannot connect to cluster in context "${this.context}": ${connectTest.stderr}`
         );
-        console.error(connectTest.stderr.toString());
         return false;
       }
 
@@ -105,9 +135,13 @@ export class KubernetesManager {
 
     try {
       // Check if namespace already exists
-      const checkNs = await $`kubectl get namespace ${this.namespace}`.quiet();
+      const checkResult = await ShellExecutor.execQuiet("kubectl", [
+        "get",
+        "namespace",
+        this.namespace,
+      ]);
 
-      if (checkNs.exitCode === 0) {
+      if (checkResult.success) {
         console.log(`✅ Namespace "${this.namespace}" already exists`);
         this.namespaceReady = true;
         return true;
@@ -115,22 +149,35 @@ export class KubernetesManager {
 
       // Create namespace
       console.log(`📝 Creating namespace "${this.namespace}"`);
-      const createResult = await $`kubectl create namespace ${this.namespace}`;
+      const createResult = await ShellExecutor.exec("kubectl", [
+        "create",
+        "namespace",
+        this.namespace,
+      ]);
 
-      if (createResult.exitCode !== 0) {
-        console.error(`❌ Failed to create namespace "${this.namespace}"`);
-        console.error(createResult.stderr.toString());
+      if (!createResult.success) {
+        console.error(
+          `❌ Failed to create namespace "${this.namespace}": ${createResult.stderr}`
+        );
         return false;
       }
 
-      // Wait for namespace to be ready
+      // Wait for namespace to be ready with timeout
       console.log(
         `⏳ Waiting for namespace "${this.namespace}" to be ready...`
       );
-      const waitResult =
-        await $`kubectl wait --for=condition=Ready namespace/${this.namespace} --timeout=30s`.quiet();
+      const waitResult = await ShellExecutor.execQuiet(
+        "kubectl",
+        [
+          "wait",
+          "--for=condition=Ready",
+          `namespace/${this.namespace}`,
+          "--timeout=30s",
+        ],
+        { timeout: 35000 }
+      );
 
-      if (waitResult.exitCode !== 0) {
+      if (!waitResult.success) {
         console.warn(`⚠️  Namespace may not be fully ready, but proceeding...`);
       }
 
@@ -138,9 +185,7 @@ export class KubernetesManager {
       this.namespaceReady = true;
       return true;
     } catch (error) {
-      console.error(
-        `❌ Error ensuring namespace exists and is ready "${this.namespace}"`
-      );
+      console.error(`❌ Error ensuring namespace "${this.namespace}":`, error);
       return false;
     }
   }
@@ -181,27 +226,38 @@ export class KubernetesManager {
         console.log(`☸️  Applying: ${file}`);
 
         // Validate YAML before applying
-        const validateResult =
-          await $`kubectl apply --dry-run=client -f ${file} -n ${this.namespace}`.quiet();
-        if (validateResult.exitCode !== 0) {
-          console.error(`❌ YAML validation failed for ${file}:`);
-          console.error(validateResult.stderr.toString());
-          throw new Error(`Invalid YAML in ${file}`);
+        const validateResult = await ShellExecutor.execQuiet("kubectl", [
+          "apply",
+          "--dry-run=client",
+          "-f",
+          file,
+          "-n",
+          this.namespace,
+        ]);
+
+        if (!validateResult.success) {
+          console.error(
+            `❌ YAML validation failed for ${file}: ${validateResult.stderr}`
+          );
+          throw new Error(`Invalid YAML in ${file}: ${validateResult.stderr}`);
         }
 
-        // Apply the YAML
-        const applyResult =
-          await $`kubectl apply -f ${file} -n ${this.namespace}`;
-        if (applyResult.exitCode !== 0) {
-          console.error(`❌ Failed to apply ${file}:`);
-          console.error(applyResult.stderr.toString());
-          throw new Error(`Failed to apply ${file}`);
+        // Apply the YAML with streaming output for better feedback
+        const applyResult = await ShellExecutor.execStream("kubectl", [
+          "apply",
+          "-f",
+          file,
+          "-n",
+          this.namespace,
+        ]);
+
+        if (!applyResult.success) {
+          console.error(`❌ Failed to apply ${file}: ${applyResult.stderr}`);
+          throw new Error(`Failed to apply ${file}: ${applyResult.stderr}`);
         }
 
-        const output = applyResult.stdout.toString().trim();
-        if (output) {
-          results.push(output);
-          console.log(`   ${output}`);
+        if (applyResult.stdout) {
+          results.push(applyResult.stdout);
         }
       }
 
@@ -230,18 +286,20 @@ export class KubernetesManager {
       for (const file of yamlFiles) {
         console.log(`🗑️  Deleting: ${file}`);
 
-        const deleteResult =
-          await $`kubectl delete -f ${file} -n ${this.namespace} --ignore-not-found=true --timeout=30s`;
-        if (deleteResult.exitCode !== 0) {
+        const deleteResult = await ShellExecutor.exec("kubectl", [
+          "delete",
+          "-f",
+          file,
+          "-n",
+          this.namespace,
+          "--ignore-not-found=true",
+          "--timeout=30s",
+        ]);
+
+        if (!deleteResult.success) {
           console.warn(
-            `⚠️  Some resources from ${file} may not have been deleted:`
+            `⚠️  Some resources from ${file} may not have been deleted: ${deleteResult.stderr}`
           );
-          console.warn(deleteResult.stderr.toString());
-        } else {
-          const output = deleteResult.stdout.toString().trim();
-          if (output) {
-            console.log(`   ${output}`);
-          }
         }
       }
 
@@ -260,13 +318,25 @@ export class KubernetesManager {
       const deployments: string[] = [];
 
       for (const file of yamlFiles) {
-        const getDeployments =
-          await $`kubectl get -f ${file} -n ${this.namespace} -o jsonpath='{.items[?(@.kind=="Deployment")].metadata.name}'`.quiet();
-        if (getDeployments.exitCode === 0) {
-          const deploymentNames = getDeployments.stdout.toString().trim();
-          if (deploymentNames) {
-            deployments.push(...deploymentNames.split(" "));
-          }
+        const getDeploymentsResult = await ShellExecutor.execQuiet("kubectl", [
+          "get",
+          "-f",
+          file,
+          "-n",
+          this.namespace,
+          "-o",
+          "jsonpath={.items[?(@.kind=='Deployment')].metadata.name}",
+        ]);
+
+        if (
+          getDeploymentsResult.success &&
+          getDeploymentsResult.stdout.trim()
+        ) {
+          const deploymentNames = getDeploymentsResult.stdout
+            .trim()
+            .split(" ")
+            .filter((name) => name);
+          deployments.push(...deploymentNames);
         }
       }
 
@@ -278,17 +348,35 @@ export class KubernetesManager {
         `⏳ Waiting for ${deployments.length} deployment(s) to be ready...`
       );
 
-      for (const deployment of deployments) {
+      // Wait for all deployments in parallel with individual timeouts
+      const waitPromises = deployments.map(async (deployment) => {
         console.log(`   Waiting for deployment/${deployment}...`);
-        const waitResult =
-          await $`kubectl wait --for=condition=available deployment/${deployment} -n ${this.namespace} --timeout=60s`.quiet();
 
-        if (waitResult.exitCode === 0) {
+        const waitResult = await ShellExecutor.execQuiet(
+          "kubectl",
+          [
+            "wait",
+            "--for=condition=available",
+            `deployment/${deployment}`,
+            "-n",
+            this.namespace,
+            "--timeout=60s",
+          ],
+          { timeout: 65000 }
+        );
+
+        if (waitResult.success) {
           console.log(`   ✅ deployment/${deployment} is ready`);
+          return true;
         } else {
-          console.warn(`   ⚠️  deployment/${deployment} may not be ready yet`);
+          console.warn(
+            `   ⚠️  deployment/${deployment} may not be ready yet: ${waitResult.stderr}`
+          );
+          return false;
         }
-      }
+      });
+
+      await Promise.allSettled(waitPromises);
     } catch (error) {
       console.warn(`⚠️  Error waiting for deployments:`, error);
     }
@@ -302,11 +390,14 @@ export class KubernetesManager {
         throw new Error(`YAML path does not exist: ${yamlPath}`);
       }
 
-      // Check if it's a directory
-      const stat = await Bun.file(yamlPath).stat();
+      // Check if it's a directory using shell command
+      const statResult = await ShellExecutor.execQuiet("test", [
+        "-d",
+        yamlPath,
+      ]);
 
-      if (stat.isDirectory) {
-        // Find all YAML files in directory
+      if (statResult.success) {
+        // It's a directory - find all YAML files
         const patterns = [
           path.join(yamlPath, "*.yaml"),
           path.join(yamlPath, "*.yml"),
@@ -379,10 +470,82 @@ export class KubernetesManager {
       const ready = await this.initialize();
       if (!ready) return "Cluster not accessible";
 
-      const info = await $`kubectl cluster-info`.text();
-      return info;
+      const infoResult = await ShellExecutor.exec("kubectl", ["cluster-info"]);
+      return infoResult.success
+        ? infoResult.stdout
+        : `Error: ${infoResult.stderr}`;
     } catch (error) {
       return `Error getting cluster info: ${error}`;
+    }
+  }
+
+  /**
+   * Get all pods in the namespace
+   */
+  async getPods(): Promise<string[]> {
+    try {
+      const ready = await this.initialize();
+      if (!ready) return [];
+
+      const podsResult = await ShellExecutor.execQuiet("kubectl", [
+        "get",
+        "pods",
+        "-n",
+        this.namespace,
+        "-o",
+        "name",
+      ]);
+
+      if (podsResult.success) {
+        return podsResult.stdout.split("\n").filter((pod) => pod.trim());
+      }
+      return [];
+    } catch (error) {
+      console.warn(`⚠️  Failed to get pods: ${error}`);
+      return [];
+    }
+  }
+
+  /**
+   * Get resource status for debugging
+   */
+  async getResourceStatus(): Promise<{ [key: string]: any }> {
+    try {
+      const ready = await this.initialize();
+      if (!ready) return { error: "Kubernetes not ready" };
+
+      const commands = [
+        { name: "pods", args: ["get", "pods", "-n", this.namespace] },
+        { name: "services", args: ["get", "services", "-n", this.namespace] },
+        {
+          name: "deployments",
+          args: ["get", "deployments", "-n", this.namespace],
+        },
+        {
+          name: "events",
+          args: [
+            "get",
+            "events",
+            "-n",
+            this.namespace,
+            "--sort-by=.lastTimestamp",
+          ],
+        },
+      ];
+
+      const status: { [key: string]: any } = {};
+
+      for (const { name, args } of commands) {
+        const result = await ShellExecutor.execQuiet("kubectl", args);
+        status[name] = {
+          success: result.success,
+          output: result.success ? result.stdout : result.stderr,
+        };
+      }
+
+      return status;
+    } catch (error) {
+      return { error: error.toString() };
     }
   }
 }

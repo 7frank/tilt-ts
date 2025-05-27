@@ -5,7 +5,9 @@ import type {
   GlobalTiltState,
   DockerBuildConfig,
   K8sYamlConfig,
+  HotReloadConfig,
 } from "./types";
+import type { ImageBuildContext } from "dockerode";
 
 export class TiltConfig {
   private configFile: BunFile;
@@ -123,7 +125,6 @@ export class TiltConfig {
    * Update Docker registry with validation
    */
   setDockerRegistry(registry: string) {
-    
     if (!registry || registry.trim().length === 0) {
       throw new Error("Docker registry cannot be empty");
     }

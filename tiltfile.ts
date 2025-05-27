@@ -21,7 +21,7 @@ docker_build(
 );
 
 // Apply Kubernetes manifests from example directory
-k8s_yaml("./example/*");
+k8s_yaml("./example/deployment.yaml");
 
 // Build a second test image
 docker_build(

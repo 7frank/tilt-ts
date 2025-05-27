@@ -1,27 +1,65 @@
 {
-  "name": "tilt_ts",
-  "module": "tilt.ts",
-  "type": "module",
+  "name": "@tilt-ts/core",
+  "version": "0.1.0",
+  "description": "TypeScript implementation of Tilt.dev for Kubernetes development workflows",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "tilt-ts": "dist/tilt.js"
+  },
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
+    "build": "tsc && chmod +x dist/tilt.js",
+    "build:watch": "tsc --watch",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build",
+    "publish:patch": "npm version patch && npm publish",
+    "publish:minor": "npm version minor && npm publish",
+    "publish:major": "npm version major && npm publish",
     "start": "rm -rf .tilt-ts && NODE_TLS_REJECT_UNAUTHORIZED=0 bun run --watch tilt.ts up",
     "up": "bun run tilt.ts up",
-    "down": "bun run tilt.ts down", 
+    "down": "bun run tilt.ts down",
     "status": "bun run tilt.ts status",
     "dry-run": "bun run tilt.ts up --dry-run",
     "validate": "bun run tilt.ts validate",
     "ip": "docker network inspect k3d-ecosys-local-dev | grep -m 1 \"Gateway\" | awk -F '\"' '{print $4}'"
   },
+  "keywords": [
+    "tilt",
+    "kubernetes",
+    "docker",
+    "development",
+    "devops",
+    "k8s",
+    "live-reload",
+    "typescript"
+  ],
+  "author": "Your Name <your.email@example.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/7frank/tilt-ts.git"
+  },
+  "bugs": {
+    "url": "https://github.com/7frank/tilt-ts/issues"
+  },
+  "homepage": "https://github.com/7frank/tilt-ts#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "devDependencies": {
     "@types/bun": "latest",
     "@types/node": "^20.0.0",
-    "@types/js-yaml": "^4.0.5"
-  },
-  "peerDependencies": {
+    "@types/js-yaml": "^4.0.5",
     "typescript": "^5.0.0"
   },
   "dependencies": {
     "@kubernetes/client-node": "^1.0.0",
-    "@types/clone-deep": "^4.0.4", 
+    "@types/clone-deep": "^4.0.4",
     "@types/deep-diff": "^1.0.5",
     "@types/dockerode": "^3.3.34",
     "chokidar": "^4.0.3",
@@ -30,7 +68,7 @@
     "deep-diff": "^1.0.2",
     "dockerode": "^4.0.4",
     "fs-extra": "^11.3.0",
-    "glob": "^10.3.0",  
+    "glob": "^10.3.0",
     "globby": "^14.1.0",
     "js-yaml": "^4.1.0"
   }

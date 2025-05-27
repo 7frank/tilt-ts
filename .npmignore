@@ -1,0 +1,35 @@
+# Source files
+src/
+tilt.ts
+tiltfile.ts
+tsconfig.json
+
+# Development files
+example/
+scripts/
+.github/
+.tilt-ts/
+
+# Dependencies
+node_modules/
+
+# Build artifacts (keep dist/)
+*.log
+*.tmp
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+*.test.ts
+*.spec.ts
+coverage/
+
+# Misc
+.env*
+.cache

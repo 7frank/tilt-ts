@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import path from "node:path";
 import {
   command,
@@ -163,8 +164,8 @@ const statusCommand = command({
 
 // Main CLI
 const tiltCli = subcommands({
-  name: "tilt",
-  description: "Tilt - Kubernetes for Development",
+  name: "tilt-ts",
+  description: "Tilt TypeScript - Kubernetes for Development",
   cmds: {
     up: upCommand,
     down: downCommand,

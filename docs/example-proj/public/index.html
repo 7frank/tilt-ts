@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Express.js + Tilt-TS Example</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        h1 { 
+            text-align: center; 
+            margin-bottom: 2rem;
+            font-size: 2.5rem;
+        }
+        .api-test {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 1rem;
+            border-radius: 10px;
+            margin: 1rem 0;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        .response {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 1rem;
+            border-radius: 5px;
+            margin-top: 1rem;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            min-height: 50px;
+        }
+        .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            background: #4CAF50;
+            color: white;
+        }
+        input {
+            padding: 8px 12px;
+            border: none;
+            border-radius: 5px;
+            margin: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Express.js + Tilt-TS</h1>
+        
+        <div class="api-test">
+            <h3>🔍 Health Check</h3>
+            <button onclick="checkHealth()">Check Health</button>
+            <div id="health-response" class="response">Click button to check health...</div>
+        </div>
+
+        <div class="api-test">
+            <h3>👋 Hello API</h3>
+            <input type="text" id="name-input" placeholder="Enter your name" value="Developer">
+            <button onclick="sayHello()">Say Hello</button>
+            <div id="hello-response" class="response">Click button to say hello...</div>
+        </div>
+
+        <div class="api-test">
+            <h3>📈 Custom API</h3>
+            <button onclick="getStats()">Get Stats</button>
+            <div id="stats-response" class="response">Click button to get stats...</div>
+        </div>
+
+        <div style="text-align: center; margin-top: 2rem;">
+            <p><span class="status">LIVE</span> This app supports live updates!</p>
+            <p>🔄 Edit server.js or files in src/ to see instant changes</p>
+            <p>🔗 Service available at: <strong>http://localhost:30080</strong></p>
+        </div>
+    </div>
+
+    <script>
+        async function makeRequest(url, elementId) {
+            const element = document.getElementById(elementId);
+            element.textContent = 'Loading...';
+            
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                element.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                element.textContent = `Error: ${error.message}`;
+            }
+        }
+
+        function checkHealth() {
+            makeRequest('/api/health', 'health-response');
+        }
+
+        function sayHello() {
+            const name = document.getElementById('name-input').value || 'World';
+            makeRequest(`/api/hello?name=${encodeURIComponent(name)}`, 'hello-response');
+        }
+
+        function getStats() {
+            makeRequest('/api/stats', 'stats-response');
+        }
+
+        // Auto-refresh health on page load
+        window.onload = function() {
+            checkHealth();
+        };
+    </script>
+</body>
+</html>

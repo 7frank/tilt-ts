@@ -1,5 +1,6 @@
 {
   "name": "express-tilt-example",
+  "type":"module",
   "version": "1.0.0",
   "description": "Example Express.js app with Tilt-TS for Kubernetes development",
   "main": "server.js",

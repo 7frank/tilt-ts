@@ -19,20 +19,25 @@ async function loadTiltfile() {
   const tiltfilePath = path.resolve("./tiltfile.ts");
 
   try {
+    // Ensure tiltConfig is initialized first
+    await tiltConfig.init();
+
     // Clear previous state for fresh load
-    tiltConfig.state.docker_build = {};
-    tiltConfig.state.k8s_yaml = {};
+    const state = await tiltConfig.getState();
+    state.docker_build = {};
+    state.k8s_yaml = {};
 
     // Import the Tiltfile to register resources
     delete require.cache[tiltfilePath]; // Clear module cache
     await import(tiltfilePath + `?t=${Date.now()}`); // Cache bust
 
     console.log(`📝 Loaded Tiltfile: ${tiltfilePath}`);
+    const updatedState = await tiltConfig.getState();
     console.log(
-      `🐳 Docker builds: ${Object.keys(tiltConfig.state.docker_build).length}`
+      `🐳 Docker builds: ${Object.keys(updatedState.docker_build).length}`
     );
     console.log(
-      `☸️  K8s resources: ${Object.keys(tiltConfig.state.k8s_yaml).length}`
+      `☸️  K8s resources: ${Object.keys(updatedState.k8s_yaml).length}`
     );
   } catch (error) {
     console.error("❌ Failed to load Tiltfile:", error);
@@ -77,8 +82,10 @@ const validateCommand = command({
 
       console.log("🔍 Validating Tiltfile configuration...");
 
+      const state = await tiltConfig.getState();
+
       // Validate Docker builds
-      const dockerBuilds = Object.entries(tiltConfig.state.docker_build);
+      const dockerBuilds = Object.entries(state.docker_build);
       console.log(`\n🐳 Docker Builds (${dockerBuilds.length}):`);
 
       for (const [name, config] of dockerBuilds) {
@@ -96,7 +103,7 @@ const validateCommand = command({
       }
 
       // Validate K8s YAML files
-      const k8sResources = Object.entries(tiltConfig.state.k8s_yaml);
+      const k8sResources = Object.entries(state.k8s_yaml);
       console.log(`\n☸️  Kubernetes Resources (${k8sResources.length}):`);
 
       let totalFiles = 0;
@@ -147,16 +154,18 @@ const statusCommand = command({
   args: {},
   handler: async () => {
     await loadTiltfile();
+    const state = await tiltConfig.getState();
+
     console.log("📊 Current Tilt State:");
-    console.log("Docker Registry:", tiltConfig.state.docker.registry);
-    console.log("K8s Context:", tiltConfig.state.k8s.context);
-    console.log("K8s Namespace:", tiltConfig.state.k8s.namespace);
+    console.log("Docker Registry:", state.docker.registry);
+    console.log("K8s Context:", state.k8s.context);
+    console.log("K8s Namespace:", state.k8s.namespace);
     console.log("\n🐳 Docker Builds:");
-    Object.entries(tiltConfig.state.docker_build).forEach(([name, config]) => {
+    Object.entries(state.docker_build).forEach(([name, config]) => {
       console.log(`  - ${name}: ${config.buildContext.context}`);
     });
     console.log("\n☸️  K8s Resources:");
-    Object.entries(tiltConfig.state.k8s_yaml).forEach(([name, config]) => {
+    Object.entries(state.k8s_yaml).forEach(([name, config]) => {
       console.log(`  - ${config.yamlPath}`);
     });
   },

@@ -5,7 +5,7 @@ import path from "path";
 
 /**
  * Register Kubernetes YAML resources for deployment
- * 
+ *
  * Supports multiple input formats:
  * - Single file: k8s_yaml("./example/deployment.yaml")
  * - Directory: k8s_yaml("./example/") or k8s_yaml("./example")
@@ -37,7 +37,7 @@ export function k8s_yaml(yamlInput: string | string[]) {
   }
 
   console.log(`📁 Registered ${uniquePaths.length} YAML file(s):`);
-  uniquePaths.forEach(p => console.log(`   - ${p}`));
+  uniquePaths.forEach((p) => console.log(`   - ${p}`));
 }
 
 /**
@@ -47,7 +47,7 @@ function resolveYamlInput(input: string): string[] {
   try {
     // Normalize path separators and resolve relative paths
     const normalizedInput = path.resolve(input);
-    
+
     // Check if it's a glob pattern (contains *, ?, [, or **)
     if (containsGlobPattern(input)) {
       return resolveGlobPattern(input);
@@ -87,7 +87,7 @@ function resolveYamlInput(input: string): string[] {
  * Check if a string contains glob pattern characters
  */
 function containsGlobPattern(path: string): boolean {
-  return /[*?[\]{}]/.test(path) || path.includes('**');
+  return /[*?[\]{}]/.test(path) || path.includes("**");
 }
 
 /**
@@ -97,22 +97,24 @@ function resolveGlobPattern(pattern: string): string[] {
   try {
     const matches = glob.sync(pattern, {
       ignore: [
-        '**/node_modules/**',
-        '**/.git/**',
-        '**/.*', // Hidden files
-        '**/*.tmp',
-        '**/*.bak'
+        "**/node_modules/**",
+        "**/.git/**",
+        "**/.*", // Hidden files
+        "**/*.tmp",
+        "**/*.bak",
       ],
       absolute: true,
-      nodir: true // Only return files, not directories
+      nodir: true, // Only return files, not directories
     });
 
     // Filter to only YAML files
     const yamlFiles = matches.filter(isYamlFile);
-    
+
     if (matches.length > yamlFiles.length) {
       const nonYamlCount = matches.length - yamlFiles.length;
-      console.log(`📝 Filtered out ${nonYamlCount} non-YAML file(s) from pattern: ${pattern}`);
+      console.log(
+        `📝 Filtered out ${nonYamlCount} non-YAML file(s) from pattern: ${pattern}`
+      );
     }
 
     return yamlFiles;
@@ -129,30 +131,26 @@ function resolveDirectory(dirPath: string): string[] {
   try {
     // Look for YAML files in directory and subdirectories
     const patterns = [
-      path.join(dirPath, '*.yaml'),
-      path.join(dirPath, '*.yml'),
-      path.join(dirPath, '**/*.yaml'),
-      path.join(dirPath, '**/*.yml')
+      path.join(dirPath, "*.yaml"),
+      path.join(dirPath, "*.yml"),
+      path.join(dirPath, "**/*.yaml"),
+      path.join(dirPath, "**/*.yml"),
     ];
 
     const allFiles: string[] = [];
-    
+
     for (const pattern of patterns) {
       const matches = glob.sync(pattern, {
-        ignore: [
-          '**/node_modules/**',
-          '**/.git/**',
-          '**/.*'
-        ],
+        ignore: ["**/node_modules/**", "**/.git/**", "**/.*"],
         absolute: true,
-        nodir: true
+        nodir: true,
       });
       allFiles.push(...matches);
     }
 
     // Remove duplicates
     const uniqueFiles = [...new Set(allFiles)];
-    
+
     if (uniqueFiles.length === 0) {
       console.warn(`⚠️  No YAML files found in directory: ${dirPath}`);
     }
@@ -169,7 +167,7 @@ function resolveDirectory(dirPath: string): string[] {
  */
 function isDirectory(path: string): boolean {
   try {
-    const stat = require('fs').statSync(path);
+    const stat = require("fs").statSync(path);
     return stat.isDirectory();
   } catch {
     return false;
@@ -181,7 +179,7 @@ function isDirectory(path: string): boolean {
  */
 function isFile(path: string): boolean {
   try {
-    const stat = require('fs').statSync(path);
+    const stat = require("fs").statSync(path);
     return stat.isFile();
   } catch {
     return false;
@@ -193,29 +191,34 @@ function isFile(path: string): boolean {
  */
 function isYamlFile(filePath: string): boolean {
   const ext = path.extname(filePath).toLowerCase();
-  return ext === '.yaml' || ext === '.yml';
+  return ext === ".yaml" || ext === ".yml";
 }
 
 /**
  * Validate YAML file content (basic check)
  */
-export function validateYamlFile(filePath: string): { valid: boolean; error?: string } {
+export function validateYamlFile(filePath: string): {
+  valid: boolean;
+  error?: string;
+} {
   try {
-    const content = require('fs').readFileSync(filePath, 'utf8');
-    
+    const content = require("fs").readFileSync(filePath, "utf8");
+
     // Basic validation - check if it's not empty and doesn't have obvious syntax errors
     if (!content.trim()) {
-      return { valid: false, error: 'File is empty' };
+      return { valid: false, error: "File is empty" };
     }
 
     // Check for common YAML issues
-    if (content.includes('\t')) {
-      console.warn(`⚠️  File ${filePath} contains tabs - YAML should use spaces for indentation`);
+    if (content.includes("\t")) {
+      console.warn(
+        `⚠️  File ${filePath} contains tabs - YAML should use spaces for indentation`
+      );
     }
 
     // Try to parse with js-yaml if available
     try {
-      const yaml = require('js-yaml');
+      const yaml = require("js-yaml");
       yaml.load(content);
     } catch (yamlError) {
       return { valid: false, error: `YAML syntax error: ${yamlError}` };
@@ -249,7 +252,7 @@ export function getYamlStats(yamlInput: string | string[]): {
     totalFiles: uniquePaths.length,
     byExtension: {} as Record<string, number>,
     byDirectory: {} as Record<string, number>,
-    largestFile: null as { path: string; size: number } | null
+    largestFile: null as { path: string; size: number } | null,
   };
 
   let maxSize = 0;
@@ -265,7 +268,7 @@ export function getYamlStats(yamlInput: string | string[]): {
 
     // Track largest file
     try {
-      const stat = require('fs').statSync(filePath);
+      const stat = require("fs").statSync(filePath);
       if (stat.size > maxSize) {
         maxSize = stat.size;
         stats.largestFile = { path: filePath, size: stat.size };

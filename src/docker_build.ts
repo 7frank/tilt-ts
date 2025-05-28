@@ -10,5 +10,6 @@ export function docker_build(
   },
   hot?: HotReloadConfig
 ) {
+  // Call the synchronous method - initialization will happen when state is accessed
   tiltConfig.addDockerBuild(imageName, buildContext, hot);
 }

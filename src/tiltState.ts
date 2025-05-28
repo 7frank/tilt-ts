@@ -13,6 +13,8 @@ export class TiltConfig {
   private configFile: BunFile;
   public state: GlobalTiltState;
   private initialState: GlobalTiltState;
+  private _initialized: boolean = false;
+  private _initPromise: Promise<void> | null = null;
 
   constructor() {
     this.configFile = this.loadFromDisk();
@@ -59,13 +61,38 @@ export class TiltConfig {
     return normalized;
   }
 
-  async init() {
+  /**
+   * Ensure the configuration is initialized
+   * This method is called automatically by other methods
+   */
+  private async ensureInitialized(): Promise<void> {
+    if (this._initialized) {
+      return;
+    }
+
+    // If already initializing, wait for it to complete
+    if (this._initPromise) {
+      return this._initPromise;
+    }
+
+    // Start initialization
+    this._initPromise = this.init();
+    return this._initPromise;
+  }
+
+  async init(): Promise<void> {
+    if (this._initialized) {
+      return;
+    }
+
     this.state = await getCachedConfig(this.configFile, this.state);
     // Ensure namespace is always normalized, even if loaded from cache
     this.state.k8s.namespace = this.normalizeNamespace(
       this.state.k8s.namespace
     );
     this.initialState = structuredClone(this.state);
+    this._initialized = true;
+    this._initPromise = null;
   }
 
   loadFromDisk(): BunFile {
@@ -73,7 +100,8 @@ export class TiltConfig {
     return file(`.tilt-ts/state-${PORT}.json`);
   }
 
-  async writeToDisk() {
+  async writeToDisk(): Promise<void> {
+    await this.ensureInitialized();
     await this.configFile.write(JSON.stringify(this.state, null, 2));
   }
 
@@ -81,7 +109,9 @@ export class TiltConfig {
     imageName: string,
     buildContext: ImageBuildContext,
     hot?: HotReloadConfig
-  ) {
+  ): void {
+    // For synchronous calls from tiltfile, we queue the operation
+    // and ensure initialization happens when the state is accessed
     this.state.docker_build[imageName] = {
       imageName,
       buildContext,
@@ -89,22 +119,27 @@ export class TiltConfig {
     };
   }
 
-  addK8sYaml(yamlPath: string) {
+  addK8sYaml(yamlPath: string): void {
+    // For synchronous calls from tiltfile, we queue the operation
+    // and ensure initialization happens when the state is accessed
     this.state.k8s_yaml[yamlPath] = { yamlPath };
   }
 
-  getInitialState(): GlobalTiltState {
+  async getInitialState(): Promise<GlobalTiltState> {
+    await this.ensureInitialized();
     return structuredClone(this.initialState);
   }
 
-  reset() {
+  async reset(): Promise<void> {
+    await this.ensureInitialized();
     this.initialState = structuredClone(this.state);
   }
 
   /**
    * Update Kubernetes context with validation
    */
-  setK8sContext(context: string) {
+  async setK8sContext(context: string): Promise<void> {
+    await this.ensureInitialized();
     if (!context || context.trim().length === 0) {
       throw new Error("Kubernetes context cannot be empty");
     }
@@ -114,7 +149,8 @@ export class TiltConfig {
   /**
    * Update Kubernetes namespace with normalization
    */
-  setK8sNamespace(namespace: string) {
+  async setK8sNamespace(namespace: string): Promise<void> {
+    await this.ensureInitialized();
     if (!namespace || namespace.trim().length === 0) {
       throw new Error("Kubernetes namespace cannot be empty");
     }
@@ -124,7 +160,8 @@ export class TiltConfig {
   /**
    * Update Docker registry with validation
    */
-  setDockerRegistry(registry: string) {
+  async setDockerRegistry(registry: string): Promise<void> {
+    await this.ensureInitialized();
     if (!registry || registry.trim().length === 0) {
       throw new Error("Docker registry cannot be empty");
     }
@@ -138,8 +175,24 @@ export class TiltConfig {
     }
     this.state.docker.registry = registry.trim();
   }
+
+  /**
+   * Get the current state, ensuring initialization
+   */
+  async getState(): Promise<GlobalTiltState> {
+    await this.ensureInitialized();
+    return this.state;
+  }
+
+  /**
+   * Check if the config is initialized
+   */
+  get isInitialized(): boolean {
+    return this._initialized;
+  }
 }
 
+// Create singleton instance without top-level await
 const tiltConfig = new TiltConfig();
-await tiltConfig.init();
+
 export { tiltConfig };

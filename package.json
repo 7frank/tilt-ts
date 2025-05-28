@@ -34,7 +34,8 @@
     "status": "bun run tilt.ts status",
     "dry-run": "bun run tilt.ts up --dry-run",
     "validate": "bun run tilt.ts validate",
-    "ip": "docker network inspect k3d-ecosys-local-dev | grep -m 1 \"Gateway\" | awk -F '\"' '{print $4}'"
+    "ip": "docker network inspect k3d-ecosys-local-dev | grep -m 1 \"Gateway\" | awk -F '\"' '{print $4}'",
+    "compile": "bun build --target=node ./tiltfile.ts > ./tiltfile.js"
   },
   "keywords": [
     "tilt",
@@ -79,6 +80,7 @@
     "glob": "^10.3.0",
     "globby": "^14.1.0",
     "js-yaml": "^4.1.0",
+    "ts-node": "^10.9.2",
     "tsup": "^8.5.0"
   }
 }

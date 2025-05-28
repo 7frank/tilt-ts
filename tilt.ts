@@ -14,8 +14,8 @@ import { TiltEngine } from "./src/tiltEngine";
 
 const tiltEngine = new TiltEngine();
 
-async function loadTiltfile() {
-  const tiltfilePath = path.resolve("./tiltfile.ts");
+async function loadTiltfile(filePath = "./tiltfile.js") {
+  const tiltfilePath = path.resolve(filePath);
 
   try {
     // Ensure tiltConfig is initialized first

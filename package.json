@@ -2,10 +2,19 @@
   "name": "@nk11/tilt-ts",
   "version": "2.0.1",
   "description": "TypeScript implementation of Tilt.dev for Kubernetes development workflows",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "types": "./dist/index.d.ts"
+    }
+  },
   "bin": {
-    "tilt-ts": "dist/tilt.js"
+    "tilt-ts": "./dist/tilt.js"
   },
   "files": [
     "dist/**/*",
@@ -13,8 +22,8 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc && chmod +x dist/tilt.js",
-    "build:watch": "tsc --watch",
+    "build": "tsup",
+    "build:watch": "tsup --watch",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run clean && npm run build",
     "publish:patch": "npm version patch && npm publish",
@@ -62,6 +71,7 @@
     "@types/clone-deep": "^4.0.4",
     "@types/deep-diff": "^1.0.5",
     "@types/dockerode": "^3.3.34",
+    "bun": "^1.2.14",
     "chokidar": "^4.0.3",
     "clone-deep": "^4.0.1",
     "cmd-ts": "^0.13.0",
@@ -70,6 +80,7 @@
     "fs-extra": "^11.3.0",
     "glob": "^10.3.0",
     "globby": "^14.1.0",
-    "js-yaml": "^4.1.0"
+    "js-yaml": "^4.1.0",
+    "tsup": "^8.5.0"
   }
 }

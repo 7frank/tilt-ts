@@ -1,5 +1,6 @@
 // src/tiltState.ts
-import { file, type BunFile } from "bun";
+import { promises as fs } from "fs";
+import path from "path";
 import { getCachedConfig } from "./getCachedConfig";
 import type {
   GlobalTiltState,
@@ -10,14 +11,14 @@ import type {
 import type { ImageBuildContext } from "dockerode";
 
 export class TiltConfig {
-  private configFile: BunFile;
+  private configFilePath: string;
   public state: GlobalTiltState;
   private initialState: GlobalTiltState;
   private _initialized: boolean = false;
   private _initPromise: Promise<void> | null = null;
 
   constructor() {
-    this.configFile = this.loadFromDisk();
+    this.configFilePath = this.getConfigFilePath();
     this.state = {
       docker: { registry: "localhost:36269" },
       k8s: {
@@ -85,7 +86,7 @@ export class TiltConfig {
       return;
     }
 
-    this.state = await getCachedConfig(this.configFile, this.state);
+    this.state = await getCachedConfig(this.configFilePath, this.state);
     // Ensure namespace is always normalized, even if loaded from cache
     this.state.k8s.namespace = this.normalizeNamespace(
       this.state.k8s.namespace
@@ -95,14 +96,32 @@ export class TiltConfig {
     this._initPromise = null;
   }
 
-  loadFromDisk(): BunFile {
+  private getConfigFilePath(): string {
     const PORT = process.env.TILT_PORT || 3001;
-    return file(`.tilt-ts/state-${PORT}.json`);
+    return path.join(process.cwd(), ".tilt-ts", `state-${PORT}.json`);
   }
 
   async writeToDisk(): Promise<void> {
     await this.ensureInitialized();
-    await this.configFile.write(JSON.stringify(this.state, null, 2));
+
+    try {
+      // Ensure directory exists
+      const dirPath = path.dirname(this.configFilePath);
+      await fs.mkdir(dirPath, { recursive: true });
+
+      // Write the file
+      await fs.writeFile(
+        this.configFilePath,
+        JSON.stringify(this.state, null, 2),
+        "utf8"
+      );
+    } catch (error) {
+      console.error(
+        `❌ Failed to write config to ${this.configFilePath}:`,
+        error
+      );
+      throw error;
+    }
   }
 
   addDockerBuild(
@@ -189,6 +208,39 @@ export class TiltConfig {
    */
   get isInitialized(): boolean {
     return this._initialized;
+  }
+
+  /**
+   * Get the config file path for debugging
+   */
+  getConfigPath(): string {
+    return this.configFilePath;
+  }
+
+  /**
+   * Check if config file exists
+   */
+  async configExists(): Promise<boolean> {
+    try {
+      await fs.access(this.configFilePath);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Delete the config file
+   */
+  async deleteConfig(): Promise<void> {
+    try {
+      await fs.unlink(this.configFilePath);
+      console.log(`🗑️  Deleted config file: ${this.configFilePath}`);
+    } catch (error: any) {
+      if (error.code !== "ENOENT") {
+        console.warn(`⚠️  Failed to delete config file: ${error.message}`);
+      }
+    }
   }
 }
 

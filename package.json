@@ -70,7 +70,6 @@
     "@types/clone-deep": "^4.0.4",
     "@types/deep-diff": "^1.0.5",
     "@types/dockerode": "^3.3.34",
-    "bun": "^1.2.14",
     "chokidar": "^4.0.3",
     "clone-deep": "^4.0.1",
     "cmd-ts": "^0.13.0",

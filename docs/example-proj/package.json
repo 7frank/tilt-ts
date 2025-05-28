@@ -16,7 +16,7 @@
     "cors": "^2.8.5"
   },
   "devDependencies": {
-    "@nk11/tilt-ts": "latest",
+    "@nk11/tilt-ts": "^2.0.4",
     "nodemon": "^3.0.1"
   },
   "keywords": ["express", "kubernetes", "tilt", "development"],

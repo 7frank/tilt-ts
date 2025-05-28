@@ -1,6 +1,6 @@
 {
   "name": "@nk11/tilt-ts",
-  "version": "2.0.3",
+  "version": "2.0.4",
   "description": "TypeScript implementation of Tilt.dev for Kubernetes development workflows",
   "type": "module",
   "main": "./dist/index.cjs",

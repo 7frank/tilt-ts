@@ -1,8 +1,25 @@
-import { diff as deepDiff, type DiffNew, type DiffDeleted, type DiffEdit, type DiffArray } from "deep-diff";
-import type { GlobalTiltState, TiltStateChange, DockerBuildConfig, K8sYamlConfig } from "./types";
+import {
+  type DiffNew,
+  type DiffDeleted,
+  type DiffEdit,
+  type DiffArray,
+} from "deep-diff";
+
+import pkg from "deep-diff";
+const { diff: deepDiff } = pkg;
+
+import type {
+  GlobalTiltState,
+  TiltStateChange,
+  DockerBuildConfig,
+  K8sYamlConfig,
+} from "./types";
 
 export class StateAnalyzer {
-  analyzeChanges(oldState: GlobalTiltState, newState: GlobalTiltState): TiltStateChange[] {
+  analyzeChanges(
+    oldState: GlobalTiltState,
+    newState: GlobalTiltState
+  ): TiltStateChange[] {
     const differences = deepDiff(oldState, newState) || [];
     const changes: TiltStateChange[] = [];
 
@@ -15,40 +32,40 @@ export class StateAnalyzer {
 
   private convertDiffToChange(diff: any): TiltStateChange {
     const path = diff.path || [];
-    
+
     switch (diff.kind) {
-      case 'N': // New
+      case "N": // New
         return {
-          type: 'added',
-          path,
-          value: diff.rhs
-        };
-      case 'D': // Deleted
-        return {
-          type: 'removed',
-          path,
-          oldValue: diff.lhs
-        };
-      case 'E': // Edited
-        return {
-          type: 'modified',
+          type: "added",
           path,
           value: diff.rhs,
-          oldValue: diff.lhs
         };
-      case 'A': // Array change
+      case "D": // Deleted
         return {
-          type: 'modified',
+          type: "removed",
+          path,
+          oldValue: diff.lhs,
+        };
+      case "E": // Edited
+        return {
+          type: "modified",
+          path,
+          value: diff.rhs,
+          oldValue: diff.lhs,
+        };
+      case "A": // Array change
+        return {
+          type: "modified",
           path: [...path, diff.index],
           value: diff.item?.rhs,
-          oldValue: diff.item?.lhs
+          oldValue: diff.item?.lhs,
         };
       default:
         return {
-          type: 'modified',
+          type: "modified",
           path,
           value: diff.rhs,
-          oldValue: diff.lhs
+          oldValue: diff.lhs,
         };
     }
   }
@@ -58,8 +75,8 @@ export class StateAnalyzer {
     removed: string[];
     modified: DockerBuildConfig[];
   } {
-    const dockerChanges = changes.filter(change => 
-      change.path[0] === 'docker_build'
+    const dockerChanges = changes.filter(
+      (change) => change.path[0] === "docker_build"
     );
 
     const added: DockerBuildConfig[] = [];
@@ -67,17 +84,18 @@ export class StateAnalyzer {
     const modified: DockerBuildConfig[] = [];
 
     for (const change of dockerChanges) {
-      if (change.path.length === 2) { // docker_build.<image_name>
+      if (change.path.length === 2) {
+        // docker_build.<image_name>
         const imageName = change.path[1] as string;
-        
+
         switch (change.type) {
-          case 'added':
+          case "added":
             added.push(change.value as DockerBuildConfig);
             break;
-          case 'removed':
+          case "removed":
             removed.push(imageName);
             break;
-          case 'modified':
+          case "modified":
             modified.push(change.value as DockerBuildConfig);
             break;
         }
@@ -92,8 +110,8 @@ export class StateAnalyzer {
     removed: string[];
     modified: K8sYamlConfig[];
   } {
-    const k8sChanges = changes.filter(change => 
-      change.path[0] === 'k8s_yaml'
+    const k8sChanges = changes.filter(
+      (change) => change.path[0] === "k8s_yaml"
     );
 
     const added: K8sYamlConfig[] = [];
@@ -101,17 +119,18 @@ export class StateAnalyzer {
     const modified: K8sYamlConfig[] = [];
 
     for (const change of k8sChanges) {
-      if (change.path.length === 2) { // k8s_yaml.<yaml_path>
+      if (change.path.length === 2) {
+        // k8s_yaml.<yaml_path>
         const yamlPath = change.path[1] as string;
-        
+
         switch (change.type) {
-          case 'added':
+          case "added":
             added.push(change.value as K8sYamlConfig);
             break;
-          case 'removed':
+          case "removed":
             removed.push(yamlPath);
             break;
-          case 'modified':
+          case "modified":
             modified.push(change.value as K8sYamlConfig);
             break;
         }

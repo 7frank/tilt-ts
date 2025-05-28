@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 import path from "node:path";
 import {
   command,
@@ -27,9 +26,7 @@ async function loadTiltfile() {
     state.docker_build = {};
     state.k8s_yaml = {};
 
-    // Import the Tiltfile to register resources
-    delete require.cache[tiltfilePath]; // Clear module cache
-    await import(tiltfilePath + `?t=${Date.now()}`); // Cache bust
+    await import(tiltfilePath); // Cache bust
 
     console.log(`📝 Loaded Tiltfile: ${tiltfilePath}`);
     const updatedState = await tiltConfig.getState();

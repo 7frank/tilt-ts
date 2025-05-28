@@ -14,7 +14,7 @@ export default defineConfig([
   // CLI build (ESM with shebang)
   {
     entry: ["tilt.ts"],
-    format: ["esm"],
+    format: ["cjs","esm"],
     dts: false,
     splitting: false,
     sourcemap: false,

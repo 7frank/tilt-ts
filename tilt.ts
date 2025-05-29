@@ -1,104 +1,184 @@
-import Docker, { type ImageBuildOptions } from "dockerode";
-import { finished } from "stream/promises";
-import { $ } from "bun";
-import cloneDeep from "clone-deep";
-import { diff as changes, applyChange } from "deep-diff";
-import * as jsondiffpatch from "jsondiffpatch";
-import { tiltConfig } from "./src/tiltState";
 import path from "node:path";
-import { command, run, string, positional, subcommands } from "cmd-ts";
+import {
+  command,
+  run,
+  string,
+  positional,
+  subcommands,
+  flag,
+  option,
+  boolean,
+} from "cmd-ts";
+import { tiltConfig } from "./src/tiltState";
+import { TiltEngine } from "./src/tiltEngine";
 
-const dryRun = true;
+const tiltEngine = new TiltEngine();
 
-async function tiltUp() {
-  const tiltfilePath = path.resolve("./tiltfile.ts");
+async function loadTiltfile(filePath = "./tiltfile.js") {
+  const tiltfilePath = path.resolve(filePath);
 
-  const tiltState = tiltConfig.state;
-  let oldTiltState = cloneDeep(tiltState);
-  await import(tiltfilePath);
-  let newTiltState = cloneDeep(tiltState);
+  try {
+    // Ensure tiltConfig is initialized first
+    await tiltConfig.init();
 
-  const docker = new Docker({ socketPath: "/var/run/docker.sock" });
+    // Clear previous state for fresh load
+    const state = await tiltConfig.getState();
+    state.docker_build = {};
+    state.k8s_yaml = {};
 
-  // TODO get differences and create TempState that has relevant changes so that later stages can apply then
-  // for docker build this means we only need "N" new or changed
-  // vfor k8s_yaml we should distigniush betweenadd new and remove
-  var lhs = oldTiltState;
-  var rhs = newTiltState;
-  var differences = changes(lhs, rhs);
-  console.log(differences);
+    await import(tiltfilePath); // Cache bust
 
-  // const diffpatcher = jsondiffpatch.create({
-  //   objectHash: function (obj: any) {
-  //     return obj.name;
-  //   },
-  // });
-  // const delta = diffpatcher.diff(lhs, rhs);
-  // console.log("delta", delta);
-
-  tiltConfig.writeToDisk();
-  if (dryRun) return;
-  /**
-   * build tag and push docke rimage to private registry
-   */
-  for await (const [key, d] of Object.entries(tiltState.docker_build)) {
-    const [imageName, buildContext, hot] = d;
-
-    const privateRegistry = tiltState.docker.registry;
-    const privateTag = privateRegistry + "/" + imageName;
-
-    console.log("Building ", imageName);
-    const stream = await docker.buildImage(buildContext!, {
-      t: imageName,
-    } satisfies ImageBuildOptions);
-
-    stream.pipe(process.stdout);
-    await finished(stream);
-
-    await docker.getImage(imageName).tag({ repo: privateTag });
-    console.log("Tagged", privateTag);
-
-    // Push the image
-    const pushStream = await docker
-      .getImage(privateTag)
-      .push({ authconfig: { serveraddress: privateRegistry } });
-
-    pushStream.pipe(process.stdout);
-    await finished(pushStream);
-
-    // const paths = (hot?.live_update ?? []).filter(
-    //   (it) => it.type == "sync"
-    // ) as SYNC[];
-    // for (const p of paths) {
-    //   watchAndSyncFiles("TODOContainerName after k8s_yaml()", p.src, p.dest);
-    // }
-  }
-
-  await $`kubectl config set-context k3d-ecosys-local-dev`;
-
-  for await (const [key, d] of Object.entries(tiltState.k8s_yaml)) {
-    const [yamlFileName] = d;
-
-    const res = await $`kubectl apply -f ${yamlFileName}`.text();
-    console.log(res);
+    console.log(`📝 Loaded Tiltfile: ${tiltfilePath}`);
+    const updatedState = await tiltConfig.getState();
+    console.log(
+      `🐳 Docker builds: ${Object.keys(updatedState.docker_build).length}`
+    );
+    console.log(
+      `☸️  K8s resources: ${Object.keys(updatedState.k8s_yaml).length}`
+    );
+  } catch (error) {
+    console.error("❌ Failed to load Tiltfile:", error);
+    throw error;
   }
 }
 
-// "up" command
+// Commands
 const upCommand = command({
   name: "up",
-  description: "Start the Tilt environment.",
-  args: {},
-  handler: ({}) => {
-    tiltUp();
+  description: "Start the Tilt environment",
+  args: {
+    dryRun: flag({
+      type: boolean,
+      long: "dry-run",
+      description: "Show what would be done without actually doing it",
+      defaultValue: () => false,
+    }),
+  },
+  handler: async ({ dryRun }) => {
+    await loadTiltfile();
+    await tiltEngine.up(dryRun == true);
   },
 });
 
-// Define the CLI with subcommands
-const tiltCli = subcommands({
-  name: "tilt",
-  cmds: { up: upCommand },
+const downCommand = command({
+  name: "down",
+  description: "Stop the Tilt environment",
+  args: {},
+  handler: async () => {
+    await tiltEngine.down();
+  },
 });
 
-// Run the CLI
+const validateCommand = command({
+  name: "validate",
+  description: "Validate Tiltfile and YAML resources",
+  args: {},
+  handler: async () => {
+    try {
+      await loadTiltfile();
+
+      console.log("🔍 Validating Tiltfile configuration...");
+
+      const state = await tiltConfig.getState();
+
+      // Validate Docker builds
+      const dockerBuilds = Object.entries(state.docker_build);
+      console.log(`\n🐳 Docker Builds (${dockerBuilds.length}):`);
+
+      for (const [name, config] of dockerBuilds) {
+        console.log(`   ✅ ${name}`);
+        console.log(`      Context: ${config.buildContext.context}`);
+        console.log(
+          `      Dockerfile: ${config.buildContext.dockerfile || "Dockerfile"}`
+        );
+
+        if (config.hot?.live_update) {
+          console.log(
+            `      Live updates: ${config.hot.live_update.length} step(s)`
+          );
+        }
+      }
+
+      // Validate K8s YAML files
+      const k8sResources = Object.entries(state.k8s_yaml);
+      console.log(`\n☸️  Kubernetes Resources (${k8sResources.length}):`);
+
+      let totalFiles = 0;
+      let validFiles = 0;
+      let invalidFiles = 0;
+
+      for (const [_, config] of k8sResources) {
+        console.log(`   📄 ${config.yamlPath}`);
+
+        // Validate the YAML file
+        const { validateYamlFile } = await import("./src/k8s_yaml");
+        const validation = validateYamlFile(config.yamlPath);
+
+        totalFiles++;
+
+        if (validation.valid) {
+          console.log(`      ✅ Valid YAML`);
+          validFiles++;
+        } else {
+          console.log(`      ❌ Invalid YAML: ${validation.error}`);
+          invalidFiles++;
+        }
+      }
+
+      // Summary
+      console.log(`\n📊 Validation Summary:`);
+      console.log(`   Docker builds: ${dockerBuilds.length}`);
+      console.log(`   YAML files: ${totalFiles}`);
+      console.log(`   Valid YAML: ${validFiles}`);
+      console.log(`   Invalid YAML: ${invalidFiles}`);
+
+      if (invalidFiles > 0) {
+        console.log(`\n⚠️  Found ${invalidFiles} invalid YAML file(s)`);
+        process.exit(1);
+      } else {
+        console.log(`\n✅ All configurations are valid!`);
+      }
+    } catch (error) {
+      console.error("❌ Validation failed:", error);
+      process.exit(1);
+    }
+  },
+});
+
+const statusCommand = command({
+  name: "status",
+  description: "Show current Tilt status",
+  args: {},
+  handler: async () => {
+    await loadTiltfile();
+    const state = await tiltConfig.getState();
+
+    console.log("📊 Current Tilt State:");
+    console.log("Docker Registry:", state.docker.registry);
+    console.log("K8s Context:", state.k8s.context);
+    console.log("K8s Namespace:", state.k8s.namespace);
+    console.log("\n🐳 Docker Builds:");
+    Object.entries(state.docker_build).forEach(([name, config]) => {
+      console.log(`  - ${name}: ${config.buildContext.context}`);
+    });
+    console.log("\n☸️  K8s Resources:");
+    Object.entries(state.k8s_yaml).forEach(([name, config]) => {
+      console.log(`  - ${config.yamlPath}`);
+    });
+  },
+});
+
+// Main CLI
+const tiltCli = subcommands({
+  name: "tilt-ts",
+  description: "Tilt TypeScript - Kubernetes for Development",
+  cmds: {
+    up: upCommand,
+    down: downCommand,
+    status: statusCommand,
+    validate: validateCommand,
+  },
+});
+
+// Run CLI
 run(tiltCli, process.argv.slice(2));

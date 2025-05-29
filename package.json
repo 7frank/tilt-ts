@@ -1,15 +1,69 @@
 {
-  "name": "tilt_ts",
-  "module": "index.ts",
+  "name": "@nk11/tilt-ts",
+  "version": "2.0.5",
+  "description": "TypeScript implementation of Tilt.dev for Kubernetes development workflows",
   "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "tilt-ts": "./dist/tilt.js"
+  },
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
-    "start": "rm -rf .tilt-ts  && NODE_TLS_REJECT_UNAUTHORIZED=0  bun run --watch tilt.ts up",
-    "ip":"docker network inspect k3d-ecosys-local-dev | grep -m 1 \"Gateway\" | awk -F '\"' '{print $4}'"
+    "build": "tsup",
+    "build:watch": "tsup --watch",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build",
+    "publish:patch": "npm version patch && npm publish",
+    "publish:minor": "npm version minor && npm publish",
+    "publish:major": "npm version major && npm publish",
+    "start": "rm -rf .tilt-ts && NODE_TLS_REJECT_UNAUTHORIZED=0 bun run --watch tilt.ts up",
+    "up": "bun run tilt.ts up",
+    "down": "bun run tilt.ts down",
+    "status": "bun run tilt.ts status",
+    "dry-run": "bun run tilt.ts up --dry-run",
+    "validate": "bun run tilt.ts validate",
+    "ip": "docker network inspect k3d-ecosys-local-dev | grep -m 1 \"Gateway\" | awk -F '\"' '{print $4}'",
+    "compile": "bun build --target=node ./tiltfile.ts > ./tiltfile.js"
+  },
+  "keywords": [
+    "tilt",
+    "kubernetes",
+    "docker",
+    "development",
+    "devops",
+    "k8s",
+    "live-reload",
+    "typescript"
+  ],
+  "author": "Your Name <your.email@example.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/7frank/tilt-ts.git"
+  },
+  "bugs": {
+    "url": "https://github.com/7frank/tilt-ts/issues"
+  },
+  "homepage": "https://github.com/7frank/tilt-ts#readme",
+  "engines": {
+    "node": ">=18.0.0"
   },
   "devDependencies": {
-    "@types/bun": "latest"
-  },
-  "peerDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^20.0.0",
+    "@types/js-yaml": "^4.0.5",
     "typescript": "^5.0.0"
   },
   "dependencies": {
@@ -23,7 +77,10 @@
     "deep-diff": "^1.0.2",
     "dockerode": "^4.0.4",
     "fs-extra": "^11.3.0",
+    "glob": "^10.3.0",
     "globby": "^14.1.0",
-    "jsondiffpatch": "^0.6.0"
+    "js-yaml": "^4.1.0",
+    "ts-node": "^10.9.2",
+    "tsup": "^8.5.0"
   }
 }

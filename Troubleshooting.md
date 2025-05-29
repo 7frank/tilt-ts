@@ -1,11 +1,5 @@
-##
+## Troubleshooting
 
-### tiltfile.ts import
-
-- file cant be imported in compiled artifact due to ts extension not registered
-- we will cirumvent this by having a small compile step beforehand
-
-  - see "compile" script
 
 ###
 
@@ -13,3 +7,10 @@
 - did we break the impl?
   - git bisect?
   - "br up"
+
+### tiltfile.ts import
+
+- file cant be imported in compiled artifact due to ts extension not registered
+- we will cirumvent this by having a small compile step beforehand
+
+  - see "compile" script
